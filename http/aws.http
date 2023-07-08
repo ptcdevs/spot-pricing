@@ -1,0 +1,31 @@
+### full catalog
+GET https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/index.json
+Accept: application/json
+
+### 
+GET https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/index.json
+Accept: application/json
+
+###
+GET https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/current/index.json
+Accept: application/json
+
+###
+GET https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/current/region_index.json
+Accept: application/json
+
+###
+GET https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/20230705233202/us-east-1/index.json
+Accept: application/json
+
+###
+GET https://pricing.us-east-1.amazonaws.com/savingsPlan/v1.0/aws/AWSComputeSavingsPlan/current/index.json
+Accept: application/json
+
+###
+GET https://pricing.us-east-1.amazonaws.com/savingsPlan/v1.0/aws/AWSComputeSavingsPlan/20230627015046/region_index.json
+Accept: application/json
+
+###
+GET https://pricing.us-east-1.amazonaws.com/savingsPlan/v1.0/aws/AWSComputeSavingsPlan/20230627015046/us-west-2-den-1/index.json
+Accept: application/json
