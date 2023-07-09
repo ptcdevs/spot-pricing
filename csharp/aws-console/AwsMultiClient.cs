@@ -7,25 +7,26 @@ namespace aws_console;
 
 public class AwsMultiClient
 {
-    public List<RegionEndpoint> RegionEndpoints { get; }
+    public IEnumerable<RegionEndpoint> RegionEndpoints { get; }
     public BasicAWSCredentials Credentials { get; }
-    public List<AmazonEC2Client> RegionalClients { get; }
+    public IEnumerable<AmazonEC2Client> RegionalClients { get; }
 
-    public AwsMultiClient(List<RegionEndpoint> regionEndpoints, BasicAWSCredentials credentials)
+    public AwsMultiClient(IEnumerable<RegionEndpoint> regionEndpoints, BasicAWSCredentials credentials)
     {
         RegionEndpoints = regionEndpoints;
         Credentials = credentials;
         RegionalClients = RegionEndpoints
-            .Select(endpoint => new AmazonEC2Client(Credentials, endpoint))
-            .ToList();
+            .Select(endpoint => new AmazonEC2Client(Credentials, endpoint));
     }
 
-    public List<AvailabilityZone> GetAvailabilityZonesList(DescribeAvailabilityZonesRequest req)
+    public async Task<IEnumerable<AvailabilityZone>> GetAvailabilityZonesList(DescribeAvailabilityZonesRequest req)
     {
-        var availabilityZones = RegionalClients
-            .Select(async client => await client.DescribeAvailabilityZonesAsync(req))
-            .SelectMany(response => response.Result.AvailabilityZones)
-            .ToList();
+        var availabilityZonesResponsesAsync = RegionalClients
+            .Select(async client => await client.DescribeAvailabilityZonesAsync(req));
+        var zonesResponses = await Task.WhenAll(availabilityZonesResponsesAsync);
+
+        var availabilityZones = zonesResponses
+            .SelectMany(response => response.AvailabilityZones);
 
         return availabilityZones;
     }

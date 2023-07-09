@@ -8,3 +8,6 @@ params/instance-types.json:
 
 avail-zones-us-east-2:
 	aws ec2 describe-availability-zones --region us-east-2
+	
+filter-types: params/instance-types.json
+	jq -r ".InstanceTypes[] | select(.InstanceType|startswith(\"p4\")) | .InstanceType" params/instance-types.json 
