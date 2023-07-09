@@ -9,5 +9,14 @@ params/instance-types.json:
 avail-zones-us-east-2:
 	aws ec2 describe-availability-zones --region us-east-2
 	
-filter-types: params/instance-types.json
-	jq -r ".InstanceTypes[] | select(.InstanceType|startswith(\"p4\")) | .InstanceType" params/instance-types.json 
+params/gpu-instances.json: params/instance-types.json
+	jq -r "[.InstanceTypes[] | \
+ 		select((.InstanceType|startswith(\"p4\")) \
+			or (.InstanceType|startswith(\"p3\")) \
+			or (.InstanceType|startswith(\"g3\")) \
+			or (.InstanceType|startswith(\"g4\")) \
+			or (.InstanceType|startswith(\"g5\")) \
+			or (.InstanceType|startswith(\"g5g\"))) \
+		| .InstanceType] |sort " params/instance-types.json > params/gpu-instances.json
+
+.PHONY: params/gpu-instances.json
