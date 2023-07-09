@@ -2,7 +2,7 @@ namespace aws_console;
 
 public static class LinqPlus
 {
-    public static  async Task<TAccumulate> AggregateUntil<TSource, TAccumulate>(this IEnumerable<TSource> source, 
+    public static TAccumulate AggregateUntil<TSource, TAccumulate>(this IEnumerable<TSource> source, 
         TAccumulate seed, 
         Func<TAccumulate, TSource, TAccumulate> func, 
         Func<TAccumulate,bool> untilFunc) 

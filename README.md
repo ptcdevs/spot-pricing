@@ -10,3 +10,4 @@ data project to query spot prices for AWS and Azure, for market research purpose
 * Authentication: <https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_aws-signing.html>
 * .NET EC2 Client: <https://docs.aws.amazon.com/sdkfornet/v3/apidocs/items/EC2/MEC2DescribeSpotPriceHistory.html>
 * SDK for .NET: <https://aws.amazon.com/sdk-for-net/>
+* CLI <https://docs.aws.amazon.com/cli/latest/reference/ec2/describe-availability-zones.html>
