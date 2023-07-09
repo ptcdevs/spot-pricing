@@ -15,8 +15,10 @@ var config = new ConfigurationBuilder()
     .AddEnvironmentVariables()
     .Build();
 
-using var awsClient = new AmazonEC2Client(
-    new BasicAWSCredentials(config["aws:accessKey"], config["AWSSECRETKEY"]), RegionEndpoint.USEast1);
+using var awsClient = new AmazonEC2Client(new BasicAWSCredentials(
+    config["aws:accessKey"], 
+    config["AWSSECRETKEY"]), 
+    RegionEndpoint.USEast1);
 //TODO: create wrapper service that will run same query against separate regional endpoints
 var regionsResult = await awsClient.DescribeRegionsAsync();
 var regions = regionsResult.Regions
