@@ -16,14 +16,37 @@ var config = new ConfigurationBuilder()
     .Build();
 
 using var awsClient = new AmazonEC2Client(
-    new BasicAWSCredentials(config["aws:accessKey"], config["AWSSECRETKEY"]),
-    RegionEndpoint.USEast1);
-var result = await awsClient
+    new BasicAWSCredentials(config["aws:accessKey"], config["AWSSECRETKEY"]), RegionEndpoint.USEast1);
+//TODO: create wrapper service that will run same query against separate regional endpoints
+var regionsResult = await awsClient.DescribeRegionsAsync();
+var regions = regionsResult.Regions
+    .Select(r => r.RegionName)
+    .OrderBy(s => s)
+    .ToList();
+
+var usEast1ZonesAsync = await awsClient
     .DescribeAvailabilityZonesAsync(new DescribeAvailabilityZonesRequest()
     {
         AllAvailabilityZones = true,
+        Filters = new List<Filter>
+        {
+            new Filter("region-name", new[] { "us-east-1" }.ToList())
+        }
     });
-var allZones = result
+var usEast1Zones = usEast1ZonesAsync
+    .AvailabilityZones
+    .Select(availZone => availZone.ZoneName)
+    .OrderBy(s => s);
+var usEast2ZonesAsync = await awsClient
+    .DescribeAvailabilityZonesAsync(new DescribeAvailabilityZonesRequest()
+    {
+        // AllAvailabilityZones = true,
+        Filters = new List<Filter>
+        {
+            new Filter("region-name", new[] { "us-east-2" }.ToList())
+        }
+    });
+var usEast2Zones = usEast1ZonesAsync
     .AvailabilityZones
     .Select(availZone => availZone.ZoneName)
     .OrderBy(s => s);
