@@ -52,6 +52,11 @@ public class AwsMultiClient
         return availabilityZones;
     }
 
+    /// <summary>
+    /// exhaustive fetch of spot price history; deprecated b/c not feasible to fetch all pricing history
+    /// </summary>
+    /// <param name="req">request paramaters for spot price history request</param>
+    /// <returns>all spot price history</returns>
     public async Task<IEnumerable<SpotPrice>> GetSpotPricing(DescribeSpotPriceHistoryRequest req)
     {
         var initialSpotPriceResponsesAsync = RegionalClients
@@ -75,11 +80,10 @@ public class AwsMultiClient
                     };
                 }
             });
-
         var spotPricesTasks = initialSpotPriceResponsesAsync
             .Select(async response =>
             {
-                var resultTask = Enumerable.Range(0, 100000)
+                var resultTask = Enumerable.Range(0, 10000)
                     .AggregateUntilAsync(
                         new
                         {
@@ -89,31 +93,138 @@ public class AwsMultiClient
                         }, async (task, i) =>
                         {
                             var completedTask = await task;
-                            Console.WriteLine($"next token: {completedTask.NextToken}");
+                            var windowsPrices = completedTask.SpotPrices
+                                .Where(sp => sp.ProductDescription.Value.Equals("Windows"))
+                                .OrderBy(sp => sp.Timestamp)
+                                .ToList();
+                            var windowsDistinctPrices = windowsPrices
+                                .Select(sp => sp.Price)
+                                .Distinct()
+                                .ToList();
+
+                            Console.WriteLine(
+                                $"fetch #: {i};\t " +
+                                $"distinct spots: {completedTask.SpotPrices.Distinct().Count()};\t " +
+                                $"min date: {completedTask.SpotPrices.Min(spotPrice => spotPrice.Timestamp.ToString("u"))};\t " +
+                                $"max date: {completedTask.SpotPrices.Max(spotPrice => spotPrice.Timestamp.ToString("u"))};\t" +
+                                $"windows prices: {windowsDistinctPrices};");
                             var nextBatch = await response.Result.Client
                                 .DescribeSpotPriceHistoryAsync(new DescribeSpotPriceHistoryRequest
-                                    { NextToken = completedTask.NextToken });
+                                {
+                                    StartTimeUtc = req.StartTimeUtc,
+                                    EndTimeUtc = req.EndTimeUtc,
+                                    NextToken = completedTask.NextToken,
+                                    Filters = req.Filters
+                                });
+
                             return new
                             {
                                 nextBatch?.NextToken,
-                                SpotPrices = completedTask.SpotPrices.Concat(nextBatch?.SpotPriceHistory ?? new List<SpotPrice>())
+                                SpotPrices =
+                                    completedTask.SpotPrices.Concat(
+                                        nextBatch?.SpotPriceHistory ?? new List<SpotPrice>())
                             };
                         },
-                        arg =>
-                        {
-                            return arg.NextToken == null;
-                        });
+                        arg => { return arg.NextToken == null; });
 
                 var results = (await resultTask).SpotPrices.ToList();
                 return results;
             });
-        
+
         var spotPricesMany = await Task.WhenAll(spotPricesTasks);
         var spotPrices = spotPricesMany
             .SelectMany(c => c)
             .ToList();
 
         return spotPrices;
+    }
+
+    /// <summary>
+    /// sample spot pricing history (since it's too much data to download exhaustively). makes sure to fetch a c
+    /// </summary>
+    /// <param name="req"></param>
+    /// <param name="start"></param>
+    /// <param name="end"></param>
+    /// <returns></returns>
+    /// <exception cref="NotImplementedException"></exception>
+    public async Task<IEnumerable<SpotPrice>> SampleSpotPricing(
+        DescribeSpotPriceHistoryRequest req,
+        DateTime start,
+        DateTime end)
+    {
+        var instanceTypes = req.Filters
+            .Where(filter => filter.Name.Equals("instance-type"))
+            .SelectMany(filter => filter.Values);
+        var productDescriptions = req.Filters
+            .Where(filter => filter.Name.Equals("product-description"))
+            .SelectMany(filter => filter.Values);
+        var spotPricesTasks = RegionalClients
+            .Select(async client =>
+            {
+                var resultTask = Enumerable.Range(0, 10000)
+                    .AggregateUntilAsync(
+                        new
+                        {
+                            NextRequest = req,
+                            SpotPrices = new List<SpotPrice>() as IEnumerable<SpotPrice>,
+                        },
+                        async (aggregate, i) =>
+                        {
+                            var describeSpotPriceHistoryResponse =
+                                await client.DescribeSpotPriceHistoryAsync((await aggregate).NextRequest);
+
+                            var nextRequest = new DescribeSpotPriceHistoryRequest
+                            {
+                                StartTimeUtc = req.StartTimeUtc,
+                                EndTimeUtc = req.EndTimeUtc,
+                                NextToken = describeSpotPriceHistoryResponse.NextToken,
+                                Filters = req.Filters
+                            };
+
+                            return new
+                            {
+                                NextRequest = nextRequest,
+                                SpotPrices =
+                                    aggregate.Result.SpotPrices.Concat(
+                                        describeSpotPriceHistoryResponse.SpotPriceHistory)
+                            };
+                        },
+                        arg =>
+                        {
+                            //TODO: refactor to return true when cross section of instance types + product descriptions has been sampled
+                            var required = instanceTypes
+                                .SelectMany(instanceType =>
+                                {
+                                    return productDescriptions
+                                        .Select(productDescription => new
+                                        {
+                                            instanceType,
+                                            productDescription
+                                        });
+                                });
+                            var completed = arg.SpotPrices
+                                .Select(spotPrice => new
+                                {
+                                    instanceType = spotPrice.InstanceType.Value,
+                                    productDescription = spotPrice.ProductDescription.Value
+                                })
+                                .Distinct();
+                            var intersection = required.Intersect(completed);
+
+                            return intersection.Count() >= required.Count();
+                        });
+
+                var results = await resultTask;
+                return results;
+            });
+
+        // var spotPricesMany = await Task.WhenAll(spotPricesTasks);
+        // var spotPrices = spotPricesMany
+        //     .SelectMany(c => c)
+        //     .ToList();
+        //
+        // return spotPrices;
+        throw new NotImplementedException();
     }
 }
 

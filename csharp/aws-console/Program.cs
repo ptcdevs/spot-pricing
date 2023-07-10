@@ -2,7 +2,6 @@
 
 using System.Text.Json.Nodes;
 using Amazon;
-using Amazon.EC2;
 using Amazon.EC2.Model;
 using Amazon.Runtime;
 using aws_console;
@@ -18,8 +17,8 @@ var config = new ConfigurationBuilder()
 var awsMultiClient = new AwsMultiClient(
     new[]
     {
-        // RegionEndpoint.USEast1,
-        RegionEndpoint.USEast2,
+        RegionEndpoint.USEast1,
+        // RegionEndpoint.USEast2,
         // RegionEndpoint.USWest1,
         // RegionEndpoint.USWest2,
     },
@@ -27,51 +26,44 @@ var awsMultiClient = new AwsMultiClient(
         config["aws:accessKey"],
         config["AWSSECRETKEY"]));
 
-var availabilityZones = await awsMultiClient
-    .GetAvailabilityZonesList(
-        new DescribeAvailabilityZonesRequest
-        {
-            AllAvailabilityZones = true,
-        });
 var instanceTypesText = File.ReadAllText("params/gpu-instances.json");
 var instanceTypes = JsonNode.Parse(instanceTypesText)?
     .AsArray()
     .Select(node => node?.ToString())
     .Where(instanceType => instanceType != null)
     .ToList();
-var spotPriceHistoryQueryFilter = new List<Filter>
-{
-    new Filter("instance-type", instanceTypes),
-};
-var responses = await awsMultiClient
-    .GetSpotPricing(new DescribeSpotPriceHistoryRequest
+
+var dateTimes = Enumerable.Range(0, 90)
+    .Select(i => DateTime.Today.AddDays(-1 * i))
+    .SelectMany(d =>
     {
-        Filters = spotPriceHistoryQueryFilter
-    });
-// var availabilityZones = initialSpotPriceHistoryResponse.SpotPriceHistory
-//     .Select(sph => sph.AvailabilityZone)
-//     .Distinct()
-//     .OrderBy(s => s)
-//     .ToList();
-//
-// var spotPriceHistory = Enumerable
-//     .Range(0, Int32.MaxValue)
-//     .AggregateUntil(
-//         new
-//         {
-//             entries = initialSpotPriceHistoryResponse.SpotPriceHistory as IEnumerable<SpotPrice>,
-//             totalEntries = initialSpotPriceHistoryResponse.SpotPriceHistory.Count(),
-//             nextToken = initialSpotPriceHistoryResponse.NextToken,
-//         }, (accumulatedPage, pageIndex) =>
-//         {
-//             var asdf = awsClient.DescribeSpotPriceHistoryAsync(new DescribeSpotPriceHistoryRequest()
-//             {
-//                 NextToken = accumulatedPage.nextToken,
-//             });
-//
-//             return accumulatedPage;
-//         },
-//         (accumulatedPage) => { return true; }
-//     );
+        return Enumerable.Range(0, 23)
+            .Select(i => d.AddHours(i));
+    })
+    .OrderBy(d => d)
+    .ToList();
+
+var responses = await awsMultiClient
+    .SampleSpotPricing(new DescribeSpotPriceHistoryRequest
+        {
+            StartTimeUtc = DateTime.Today.AddDays(-1),
+            EndTimeUtc = DateTime.Today,
+            Filters = new List<Filter>
+            {
+                new Filter("availability-zone",
+                    new List<string> { "us-east-1a", "us-east-2a", "us-east-3a", "us-east-4a" }),
+                new Filter("instance-type", instanceTypes.ToList()),
+                new Filter("product-description",
+                    new List<string>
+                    {
+                        "Linux/UNIX", "Red Hat Enterprise Linux ", "SUSE Linux ", "Windows ",
+                        "Linux/UNIX (Amazon VPC) ",
+                        "Red Hat Enterprise Linux (Amazon VPC) ", "SUSE Linux (Amazon VPC) ", "Windows (Amazon VPC)",
+                    }),
+            },
+        },
+        dateTimes.First(),
+        dateTimes.First().AddHours(1)
+    );
 
 Console.WriteLine("fin");
