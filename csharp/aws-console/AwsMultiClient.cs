@@ -89,6 +89,7 @@ public class AwsMultiClient
                         }, async (task, i) =>
                         {
                             var completedTask = await task;
+                            Console.WriteLine($"next token: {completedTask.NextToken}");
                             var nextBatch = await response.Result.Client
                                 .DescribeSpotPriceHistoryAsync(new DescribeSpotPriceHistoryRequest
                                     { NextToken = completedTask.NextToken });
@@ -106,11 +107,11 @@ public class AwsMultiClient
                 var results = (await resultTask).SpotPrices.ToList();
                 return results;
             });
+        
         var spotPricesMany = await Task.WhenAll(spotPricesTasks);
         var spotPrices = spotPricesMany
             .SelectMany(c => c)
             .ToList();
-
 
         return spotPrices;
     }
