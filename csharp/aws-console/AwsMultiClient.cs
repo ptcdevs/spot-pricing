@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Amazon;
 using Amazon.EC2;
 using Amazon.EC2.Model;
@@ -147,9 +148,7 @@ public class AwsMultiClient
     /// <param name="end"></param>
     /// <returns></returns>
     /// <exception cref="NotImplementedException"></exception>
-    public async Task<IEnumerable<SpotPrice>> SampleSpotPricing(
-        DescribeSpotPriceHistoryRequest req,
-        DateTime start,
+    public async Task<IEnumerable<SpotPrice>> SampleSpotPricing(DescribeSpotPriceHistoryRequest req, DateTime start,
         DateTime end)
     {
         var instanceTypes = req.Filters
@@ -158,15 +157,34 @@ public class AwsMultiClient
         var productDescriptions = req.Filters
             .Where(filter => filter.Name.Equals("product-description"))
             .SelectMany(filter => filter.Values);
+        var instanceTypesProductDescriptions = instanceTypes
+            .SelectMany(instanceType =>
+            {
+                return productDescriptions
+                    .Select(productDescription => new
+                    {
+                        instanceType,
+                        productDescription
+                    });
+            })
+            .ToList();
         var spotPricesTasks = RegionalClients
             .Select(async client =>
             {
-                var resultTask = Enumerable.Range(0, 10000)
+                var resultTask = Enumerable.Range(0, 15)
                     .AggregateUntilAsync(
                         new
                         {
                             NextRequest = req,
                             SpotPrices = new List<SpotPrice>() as IEnumerable<SpotPrice>,
+                            Audit = new[]
+                            {
+                                new
+                                {
+                                    FetchCount = 0,
+                                    DistinctCount = 0,
+                                }
+                            }
                         },
                         async (aggregate, i) =>
                         {
@@ -181,50 +199,70 @@ public class AwsMultiClient
                                 Filters = req.Filters
                             };
 
+                            var accumulation = aggregate.Result.SpotPrices
+                                .Concat(describeSpotPriceHistoryResponse.SpotPriceHistory);
+
                             return new
                             {
                                 NextRequest = nextRequest,
-                                SpotPrices =
-                                    aggregate.Result.SpotPrices.Concat(
-                                        describeSpotPriceHistoryResponse.SpotPriceHistory)
+                                SpotPrices = accumulation,
+                                Audit = aggregate.Result.Audit
+                                    .Concat(new[]
+                                    {
+                                        new
+                                        {
+                                            FetchCount = i,
+                                            DistinctCount = accumulation
+                                                .DistinctBy(sp => new
+                                                {
+                                                    sp.InstanceType,
+                                                    sp.ProductDescription
+                                                })
+                                                .Count()
+                                        }
+                                    })
+                                    .OrderBy(fd => fd.FetchCount)
+                                    .ToArray()
                             };
                         },
-                        arg =>
+                        aggregate =>
                         {
-                            //TODO: refactor to return true when cross section of instance types + product descriptions has been sampled
-                            var required = instanceTypes
-                                .SelectMany(instanceType =>
-                                {
-                                    return productDescriptions
-                                        .Select(productDescription => new
-                                        {
-                                            instanceType,
-                                            productDescription
-                                        });
-                                });
-                            var completed = arg.SpotPrices
+                            var completed = aggregate.SpotPrices
                                 .Select(spotPrice => new
                                 {
                                     instanceType = spotPrice.InstanceType.Value,
                                     productDescription = spotPrice.ProductDescription.Value
                                 })
-                                .Distinct();
-                            var intersection = required.Intersect(completed);
+                                .Distinct()
+                                .ToList();
+                            var intersection = instanceTypesProductDescriptions
+                                .Intersect(completed)
+                                .ToList();
+                            var missing = instanceTypesProductDescriptions
+                                .Except(intersection)
+                                .ToList();
 
-                            return intersection.Count() >= required.Count();
+                            //TODO: probably just replace this with a minimum dataset spanning 25 or so
+                            // distinct combos of instance types + product descriptions
+                            return intersection.Count >= instanceTypesProductDescriptions.Count ||
+                                   aggregate.NextRequest.NextToken == null;
                         });
 
                 var results = await resultTask;
                 return results;
             });
 
-        // var spotPricesMany = await Task.WhenAll(spotPricesTasks);
-        // var spotPrices = spotPricesMany
-        //     .SelectMany(c => c)
-        //     .ToList();
-        //
-        // return spotPrices;
-        throw new NotImplementedException();
+        var spotPricesMany = await Task.WhenAll(spotPricesTasks);
+        var spotPrices = spotPricesMany
+            .SelectMany(aggregate => aggregate.SpotPrices)
+            .DistinctBy(sp => new
+            {
+                sp.InstanceType,
+                sp.ProductDescription
+            })
+            .ToList();
+
+        return spotPrices;
     }
 }
 

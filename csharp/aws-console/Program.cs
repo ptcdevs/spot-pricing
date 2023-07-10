@@ -65,5 +65,6 @@ var responses = await awsMultiClient
         dateTimes.First(),
         dateTimes.First().AddHours(1)
     );
+//TODO: standup database and start pushing results in
 
 Console.WriteLine("fin");
