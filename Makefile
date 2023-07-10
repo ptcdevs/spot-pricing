@@ -19,4 +19,9 @@ params/gpu-instances.json: params/instance-types.json
 			or (.InstanceType|startswith(\"g5g\"))) \
 		| .InstanceType] |sort " params/instance-types.json > params/gpu-instances.json
 
-.PHONY: params/gpu-instances.json
+csharp/aws-console/params/gpu-instances.json: params/gpu-instances.json
+	cp params/gpu-instances.json csharp/aws-console/params/gpu-instances.json
+
+gpu-instances: csharp/aws-console/params/gpu-instances.json
+
+.PHONY: params/gpu-instances.json csharp/aws-console/params/gpu-instances.json

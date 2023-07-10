@@ -1,5 +1,6 @@
 ﻿// See https://aka.ms/new-console-template for more information
 
+using System.Text.Json.Nodes;
 using Amazon;
 using Amazon.EC2;
 using Amazon.EC2.Model;
@@ -26,38 +27,23 @@ var awsMultiClient = new AwsMultiClient(
         config["aws:accessKey"],
         config["AWSSECRETKEY"]));
 
-//TODO: create wrapper service that will run same query against separate regional endpoints
-var availabilityZones = await awsMultiClient.GetAvailabilityZonesList(
+var availabilityZones = await awsMultiClient
+    .GetAvailabilityZonesList(
     new DescribeAvailabilityZonesRequest()
     {
         AllAvailabilityZones = true,
-        Filters = new List<Filter>
-        {
-        }
     });
-// var usEast1Zones = usEast1ZonesAsync
-//     .AvailabilityZones
-//     .Select(availZone => availZone.ZoneName)
-//     .OrderBy(s => s);
-// var usEast2ZonesAsync = await awsClient
-//     .DescribeAvailabilityZonesAsync(new DescribeAvailabilityZonesRequest()
-//     {
-//         // AllAvailabilityZones = true,
-//         Filters = new List<Filter>
-//         {
-//             new Filter("region-name", new[] { "us-east-2" }.ToList())
-//         }
-//     });
-// var usEast2Zones = usEast1ZonesAsync
-//     .AvailabilityZones
-//     .Select(availZone => availZone.ZoneName)
-//     .OrderBy(s => s);
-// var spotPriceHistoryQueryFilter = new List<Filter>
-// {
-//     new Filter("instance-type", new[] { "", "" }.ToList()),
-//     new Filter("", new[] { "", "" }.ToList())
-// };
-// var initialSpotPriceHistoryResponse = await awsClient.DescribeSpotPriceHistoryAsync();
+var instanceTypesText = File.ReadAllText("params/gpu-instances.json");
+var instanceTypes = JsonNode.Parse(instanceTypesText)?
+    .AsArray()
+    .Select(node => node?.ToString())
+    .Where(instanceType => instanceType != null)
+    .ToList();
+var spotPriceHistoryQueryFilter = new List<Filter>
+{
+    new Filter("instance-type", instanceTypes),
+};
+var responses = await awsMultiClient.GetAvailabilityZonesList()
 // var availabilityZones = initialSpotPriceHistoryResponse.SpotPriceHistory
 //     .Select(sph => sph.AvailabilityZone)
 //     .Distinct()
