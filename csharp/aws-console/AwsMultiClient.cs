@@ -78,9 +78,35 @@ public class AwsMultiClient
         //TODO: AggregateUntil() these to paginate through full result sets
 
         var spotPrices = spotPriceResponses
-            .SelectMany(response => response.Response?.SpotPriceHistory ?? new List<SpotPrice>());
+            .SelectMany<IEnumerable<SpotPrice>>(async response =>
+            {
+                var result = Enumerable.Range(0, 100000)
+                    .AggregateUntilAsync(
+                        new
+                        {
+                            NextToken = (string)null,
+                            SpotPrices = new List<SpotPrice>() as IEnumerable<SpotPrice>
+                        }, async (task, i) =>
+                        {
+                            var completedTask = await task;
+                            return new
+                            {
+                                NextToken = "TBA", 
+                                SpotPrices = completedTask.SpotPrices.Concat(new SpotPrice[] { })
+                            };
+                        },
+                        arg =>
+                        {
+                            return true;
+                        });
+
+                return (await result).SpotPrices.ToList();
+                // return response.Response?.SpotPriceHistory ?? new List<SpotPrice>();
+                throw new NotImplementedException();
+            });
         
-        return spotPrices;
+        // return spotPrices;
+        throw new NotImplementedException();
     }
 }
 
