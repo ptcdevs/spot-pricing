@@ -53,7 +53,7 @@ public class AwsMultiClient
     }
     public async Task<IEnumerable<SpotPrice>> GetSpotPricing(DescribeSpotPriceHistoryRequest req)
     {
-        var availabilityZonesResponsesAsync = RegionalClients
+        var initialSpotPriceResponsesAsync = RegionalClients
             .Select(async client =>
             {
                 try
@@ -74,7 +74,8 @@ public class AwsMultiClient
                     };
                 }
             });
-        var spotPriceResponses = await Task.WhenAll(availabilityZonesResponsesAsync);
+        var spotPriceResponses = await Task.WhenAll(initialSpotPriceResponsesAsync);
+        //TODO: AggregateUntil() these to paginate through full result sets
 
         var spotPrices = spotPriceResponses
             .SelectMany(response => response.Response?.SpotPriceHistory ?? new List<SpotPrice>());

@@ -29,10 +29,10 @@ var awsMultiClient = new AwsMultiClient(
 
 var availabilityZones = await awsMultiClient
     .GetAvailabilityZonesList(
-    new DescribeAvailabilityZonesRequest()
-    {
-        AllAvailabilityZones = true,
-    });
+        new DescribeAvailabilityZonesRequest
+        {
+            AllAvailabilityZones = true,
+        });
 var instanceTypesText = File.ReadAllText("params/gpu-instances.json");
 var instanceTypes = JsonNode.Parse(instanceTypesText)?
     .AsArray()
@@ -43,7 +43,11 @@ var spotPriceHistoryQueryFilter = new List<Filter>
 {
     new Filter("instance-type", instanceTypes),
 };
-var responses = await awsMultiClient.GetAvailabilityZonesList()
+var responses = await awsMultiClient
+    .GetSpotPricing(new DescribeSpotPriceHistoryRequest
+    {
+        Filters = spotPriceHistoryQueryFilter
+    });
 // var availabilityZones = initialSpotPriceHistoryResponse.SpotPriceHistory
 //     .Select(sph => sph.AvailabilityZone)
 //     .Distinct()
