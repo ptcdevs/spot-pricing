@@ -18,10 +18,10 @@ var config = new ConfigurationBuilder()
 var awsMultiClient = new AwsMultiClient(
     new[]
     {
-        RegionEndpoint.USEast1,
+        // RegionEndpoint.USEast1,
         RegionEndpoint.USEast2,
-        RegionEndpoint.USWest1,
-        RegionEndpoint.USWest2,
+        // RegionEndpoint.USWest1,
+        // RegionEndpoint.USWest2,
     },
     new BasicAWSCredentials(
         config["aws:accessKey"],

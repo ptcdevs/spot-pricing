@@ -44,13 +44,14 @@ public class AwsMultiClient
                 }
             });
         var zonesResponses = await Task.WhenAll(availabilityZonesResponsesAsync);
-        
+
         var availabilityZones = zonesResponses
             .SelectMany(response => response.Response?.AvailabilityZones ?? new List<AvailabilityZone>())
             .Where(zone => zone.ZoneType.Equals("availability-zone"));
-        
+
         return availabilityZones;
     }
+
     public async Task<IEnumerable<SpotPrice>> GetSpotPricing(DescribeSpotPriceHistoryRequest req)
     {
         var initialSpotPriceResponsesAsync = RegionalClients
@@ -74,39 +75,44 @@ public class AwsMultiClient
                     };
                 }
             });
-        var spotPriceResponses = await Task.WhenAll(initialSpotPriceResponsesAsync);
-        //TODO: AggregateUntil() these to paginate through full result sets
 
-        var spotPrices = spotPriceResponses
-            .SelectMany<IEnumerable<SpotPrice>>(async response =>
+        var spotPricesTasks = initialSpotPriceResponsesAsync
+            .Select(async response =>
             {
-                var result = Enumerable.Range(0, 100000)
+                var resultTask = Enumerable.Range(0, 100000)
                     .AggregateUntilAsync(
                         new
                         {
-                            NextToken = (string)null,
-                            SpotPrices = new List<SpotPrice>() as IEnumerable<SpotPrice>
+                            response.Result.Response?.NextToken,
+                            SpotPrices = response.Result.Response?.SpotPriceHistory ??
+                                         new List<SpotPrice>() as IEnumerable<SpotPrice>,
                         }, async (task, i) =>
                         {
                             var completedTask = await task;
+                            var nextBatch = await response.Result.Client
+                                .DescribeSpotPriceHistoryAsync(new DescribeSpotPriceHistoryRequest
+                                    { NextToken = completedTask.NextToken });
                             return new
                             {
-                                NextToken = "TBA", 
-                                SpotPrices = completedTask.SpotPrices.Concat(new SpotPrice[] { })
+                                nextBatch?.NextToken,
+                                SpotPrices = completedTask.SpotPrices.Concat(nextBatch?.SpotPriceHistory ?? new List<SpotPrice>())
                             };
                         },
                         arg =>
                         {
-                            return true;
+                            return arg.NextToken == null;
                         });
 
-                return (await result).SpotPrices.ToList();
-                // return response.Response?.SpotPriceHistory ?? new List<SpotPrice>();
-                throw new NotImplementedException();
+                var results = (await resultTask).SpotPrices.ToList();
+                return results;
             });
-        
-        // return spotPrices;
-        throw new NotImplementedException();
+        var spotPricesMany = await Task.WhenAll(spotPricesTasks);
+        var spotPrices = spotPricesMany
+            .SelectMany(c => c)
+            .ToList();
+
+
+        return spotPrices;
     }
 }
 
