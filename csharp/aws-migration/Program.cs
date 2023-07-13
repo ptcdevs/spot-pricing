@@ -26,13 +26,9 @@ var serviceProvider = new ServiceCollection()
     .AddFluentMigratorCore()
     .ConfigureRunner(rb => rb
         .AddPostgres()
-        // Set the connection string
         .WithGlobalConnectionString(npgsqlConnectionStringBuilder.ToString())
-        // Define the assembly containing the migrations
-        .ScanIn(typeof(AddLogTable).Assembly).For.Migrations())
-    // Enable logging to console in the FluentMigrator way
+        .ScanIn(typeof(AddSpotPrices).Assembly).For.Migrations())
     .AddLogging(lb => lb.AddFluentMigratorConsole())
-    // Build the service provider
     .BuildServiceProvider(false);
 
 using var scope = serviceProvider.CreateScope();
@@ -40,5 +36,6 @@ var runner = serviceProvider.GetRequiredService<IMigrationRunner>();
 
 // Execute the migrations
 runner.MigrateUp();
+//TODO: add support for down migration
 
 Console.WriteLine("fin");
