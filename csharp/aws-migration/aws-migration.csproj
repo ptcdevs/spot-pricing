@@ -18,9 +18,6 @@
     </ItemGroup>
 
     <ItemGroup>
-      <None Update="ptcdevs-psql-ca-certificate.crt">
-        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      </None>
       <None Update="appsettings.json">
         <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       </None>

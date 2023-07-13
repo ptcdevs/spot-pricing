@@ -5,7 +5,9 @@ using Amazon;
 using Amazon.EC2.Model;
 using Amazon.Runtime;
 using aws_console;
+using Dapper;
 using Microsoft.Extensions.Configuration;
+using Npgsql;
 
 Console.WriteLine("start");
 
@@ -14,6 +16,20 @@ var config = new ConfigurationBuilder()
     .AddJsonFile("appsettings.json", optional: false)
     .AddEnvironmentVariables()
     .Build();
+var npgsqlConnectionStringBuilder = new NpgsqlConnectionStringBuilder()
+{
+    Host = config["postgres:host"],
+    Port = int.Parse(config["postgres:port"] ?? string.Empty),
+    Database = config["postgres:database"],
+    Username = config["postgres:username"],
+    Password = config["POSTGRESQL_PASSWORD"],
+    SslMode = SslMode.VerifyCA,
+    RootCertificate = "data/ptcdevs-psql-ca-certificate.crt",
+};
+using var connection = new NpgsqlConnection(npgsqlConnectionStringBuilder.ToString());
+connection.Query()
+
+
 var awsMultiClient = new AwsMultiClient(
     new[]
     {
