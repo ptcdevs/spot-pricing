@@ -9,12 +9,12 @@ with dates as (select date_trunc('day', dd):: date as day
      fetched as (select "Timestamp"::date + (interval '1' hour * extract(hour from "Timestamp"::date)) as starttime
                  from "SpotPrices"),
 
-     fetchable as (select d.day + (interval '1' hour * h.hour) as starttime,
+     fetchable as (select d.day + (interval '1' hour * h.hour)                       as starttime,
                           d.day + (interval '1' hour * h.hour) + (interval '1' hour) as endtime
                    from dates d
                             cross join hours h)
 
-select f.*
+select f.starttime, f.endtime
 from fetchable f
 where f.startTime not in (select startTime from fetched)
 order by f.starttime desc, f.endtime desc

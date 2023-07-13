@@ -148,8 +148,7 @@ public class AwsMultiClient
     /// <param name="end"></param>
     /// <returns></returns>
     /// <exception cref="NotImplementedException"></exception>
-    public async Task<IEnumerable<SpotPrice>> SampleSpotPricing(DescribeSpotPriceHistoryRequest req, DateTime start,
-        DateTime end)
+    public async Task<IEnumerable<SpotPrice>> SampleSpotPricing(DescribeSpotPriceHistoryRequest req)
     {
         var instanceTypes = req.Filters
             .Where(filter => filter.Name.Equals("instance-type"))

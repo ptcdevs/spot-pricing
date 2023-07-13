@@ -26,9 +26,6 @@ var npgsqlConnectionStringBuilder = new NpgsqlConnectionStringBuilder()
     SslMode = SslMode.VerifyCA,
     RootCertificate = "data/ptcdevs-psql-ca-certificate.crt",
 };
-using var connection = new NpgsqlConnection(npgsqlConnectionStringBuilder.ToString());
-connection.Query()
-
 
 var awsMultiClient = new AwsMultiClient(
     new[]
@@ -49,38 +46,44 @@ var instanceTypes = JsonNode.Parse(instanceTypesText)?
     .Where(instanceType => instanceType != null)
     .ToList();
 
-var dateTimes = Enumerable.Range(0, 90)
-    .Select(i => DateTime.Today.AddDays(-1 * i))
-    .SelectMany(d =>
+// var dateTimes = Enumerable.Range(0, 90)
+//     .Select(i => DateTime.Today.AddDays(-1 * i))
+//     .SelectMany(d =>
+//     {
+//         return Enumerable.Range(0, 23)
+//             .Select(i => d.AddHours(i));
+//     })
+//     .OrderBy(d => d)
+//     .ToList();
+using var connection = new NpgsqlConnection(npgsqlConnectionStringBuilder.ToString());
+var query = File.ReadAllText("queries/dates-hours-tofetch.sql");
+var startEndTimes = connection.Query(query);
+var results = startEndTimes
+    .Select(async startEndTime =>
     {
-        return Enumerable.Range(0, 23)
-            .Select(i => d.AddHours(i));
-    })
-    .OrderBy(d => d)
-    .ToList();
-
-var responses = await awsMultiClient
-    .SampleSpotPricing(new DescribeSpotPriceHistoryRequest
-        {
-            StartTimeUtc = DateTime.Today.AddDays(-1),
-            EndTimeUtc = DateTime.Today,
-            Filters = new List<Filter>
-            {
-                new Filter("availability-zone",
-                    new List<string> { "us-east-1a", "us-east-2a", "us-east-3a", "us-east-4a" }),
-                new Filter("instance-type", instanceTypes.ToList()),
-                new Filter("product-description",
-                    new List<string>
+        var responses = await awsMultiClient
+            .SampleSpotPricing(new DescribeSpotPriceHistoryRequest
+                {
+                    StartTimeUtc = DateTime.Parse(startEndTime.starttime),
+                    EndTimeUtc = DateTime.Parse(startEndTime.endtime),
+                    Filters = new List<Filter>
                     {
-                        "Linux/UNIX", "Red Hat Enterprise Linux ", "SUSE Linux ", "Windows ",
-                        "Linux/UNIX (Amazon VPC) ",
-                        "Red Hat Enterprise Linux (Amazon VPC) ", "SUSE Linux (Amazon VPC) ", "Windows (Amazon VPC)",
-                    }),
-            },
-        },
-        dateTimes.First(),
-        dateTimes.First().AddHours(1)
-    );
+                        new Filter("availability-zone",
+                            new List<string> { "us-east-1a", "us-east-2a", "us-east-3a", "us-east-4a" }),
+                        new Filter("instance-type", instanceTypes.ToList()),
+                        new Filter("product-description",
+                            new List<string>
+                            {
+                                "Linux/UNIX", "Red Hat Enterprise Linux ", "SUSE Linux ", "Windows ",
+                                "Linux/UNIX (Amazon VPC) ",
+                                "Red Hat Enterprise Linux (Amazon VPC) ", "SUSE Linux (Amazon VPC) ",
+                                "Windows (Amazon VPC)",
+                            }),
+                    },
+                }
+            );
+    });
+
 //TODO: standup database and start pushing results in
 
 Console.WriteLine("fin");
