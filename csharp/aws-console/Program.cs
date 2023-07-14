@@ -9,9 +9,14 @@ using aws_console;
 using Dapper;
 using Microsoft.Extensions.Configuration;
 using Npgsql;
+using Serilog;
 using Z.Dapper.Plus;
 
-Console.WriteLine("start");
+Log.Logger = new LoggerConfiguration()
+    .WriteTo.Console()
+    .CreateLogger();
+
+Log.Information("start");
 
 var config = new ConfigurationBuilder()
     .SetBasePath(Directory.GetCurrentDirectory())
@@ -30,6 +35,9 @@ var npgsqlConnectionStringBuilder = new NpgsqlConnectionStringBuilder()
 };
 DapperPlusManager.Entity<SpotPrice>()
     .Table("SpotPrices")
+    .Identity(x => x.Id);
+DapperPlusManager.Entity<QueryRun>()
+    .Table("QueriesRun")
     .Identity(x => x.Id);
 
 var awsMultiClient = new AwsMultiClient(
@@ -51,21 +59,15 @@ var instanceTypes = JsonNode.Parse(instanceTypesText)?
     .Where(instanceType => instanceType != null)
     .ToList();
 
-// var dateTimes = Enumerable.Range(0, 90)
-//     .Select(i => DateTime.Today.AddDays(-1 * i))
-//     .SelectMany(d =>
-//     {
-//         return Enumerable.Range(0, 23)
-//             .Select(i => d.AddHours(i));
-//     })
-//     .OrderBy(d => d)
-//     .ToList();
-using var connection = new NpgsqlConnection(npgsqlConnectionStringBuilder.ToString());
-var query = File.ReadAllText("queries/dates-hours-tofetch.sql");
-var startEndTimes = connection.Query(query);
+await using var connection = new NpgsqlConnection(npgsqlConnectionStringBuilder.ToString());
+await connection.OpenAsync();
+
+var startEndTimesQuery = File.ReadAllText("queries/dates-hours-tofetch.sql");
+var startEndTimes = connection.Query(startEndTimesQuery)
+    .OrderBy(ts => ts.starttime)
+    .Take(1);
 var semaphore = new SemaphoreSlim(4);
 var results = startEndTimes
-    .Take(10)
     .Select(async startEndTime =>
     {
         try
@@ -111,10 +113,11 @@ var results = startEndTimes
                     };
                     return spotPrice;
                 });
-            connection.BulkInsert(spotPrices);
+            return spotPrices;
         }
         catch (Exception ex)
         {
+            Log.Error(ex, $"error while querying startTime: {startEndTime.starttime}, endTime: {startEndTime.endtime}");
             throw ex;
         }
         finally
@@ -123,8 +126,20 @@ var results = startEndTimes
         }
     });
 
-await Task.WhenAll(results);
+var spotPrices = await Task.WhenAll(results);
+var queriesRun = startEndTimes
+    .Select(set => new QueryRun()
+    {
+        Search = "GpuMlMain",
+        StartTime = set.starttime,
+    });
+
+await using var tx = connection.BeginTransaction();
+tx.BulkInsert(queriesRun);
+tx.BulkInsert(spotPrices);
+await tx.CommitAsync();
 
 //TODO: standup database and start pushing results in
 
-Console.WriteLine("fin");
+Log.Information($"ran {string.Join(",",queriesRun.Select(q => q.StartTime.ToString("u")))}");
+Log.Information("fin");
