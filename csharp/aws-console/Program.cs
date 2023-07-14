@@ -2,12 +2,14 @@
 
 using System.Text.Json.Nodes;
 using Amazon;
+using Amazon.EC2;
 using Amazon.EC2.Model;
 using Amazon.Runtime;
 using aws_console;
 using Dapper;
 using Microsoft.Extensions.Configuration;
 using Npgsql;
+using Z.Dapper.Plus;
 
 Console.WriteLine("start");
 
@@ -26,14 +28,17 @@ var npgsqlConnectionStringBuilder = new NpgsqlConnectionStringBuilder()
     SslMode = SslMode.VerifyCA,
     RootCertificate = "data/ptcdevs-psql-ca-certificate.crt",
 };
+DapperPlusManager.Entity<SpotPrice>()
+    .Table("SpotPrices")
+    .Identity(x => x.Id);
 
 var awsMultiClient = new AwsMultiClient(
     new[]
     {
         RegionEndpoint.USEast1,
-        // RegionEndpoint.USEast2,
-        // RegionEndpoint.USWest1,
-        // RegionEndpoint.USWest2,
+        RegionEndpoint.USEast2,
+        RegionEndpoint.USWest1,
+        RegionEndpoint.USWest2,
     },
     new BasicAWSCredentials(
         config["aws:accessKey"],
@@ -58,31 +63,67 @@ var instanceTypes = JsonNode.Parse(instanceTypesText)?
 using var connection = new NpgsqlConnection(npgsqlConnectionStringBuilder.ToString());
 var query = File.ReadAllText("queries/dates-hours-tofetch.sql");
 var startEndTimes = connection.Query(query);
+var semaphore = new SemaphoreSlim(4);
 var results = startEndTimes
+    .Take(10)
     .Select(async startEndTime =>
     {
-        var responses = await awsMultiClient
-            .SampleSpotPricing(new DescribeSpotPriceHistoryRequest
-                {
-                    StartTimeUtc = DateTime.Parse(startEndTime.starttime),
-                    EndTimeUtc = DateTime.Parse(startEndTime.endtime),
-                    Filters = new List<Filter>
+        try
+        {
+            semaphore.Wait();
+            var starttime = startEndTime.starttime is DateTime ? (DateTime)startEndTime.starttime : default;
+            var endtime = startEndTime.endtime is DateTime ? (DateTime)startEndTime.endtime : default;
+            var responses = await awsMultiClient
+                .SampleSpotPricing(new DescribeSpotPriceHistoryRequest
                     {
-                        new Filter("availability-zone",
-                            new List<string> { "us-east-1a", "us-east-2a", "us-east-3a", "us-east-4a" }),
-                        new Filter("instance-type", instanceTypes.ToList()),
-                        new Filter("product-description",
-                            new List<string>
-                            {
-                                "Linux/UNIX", "Red Hat Enterprise Linux ", "SUSE Linux ", "Windows ",
-                                "Linux/UNIX (Amazon VPC) ",
-                                "Red Hat Enterprise Linux (Amazon VPC) ", "SUSE Linux (Amazon VPC) ",
-                                "Windows (Amazon VPC)",
-                            }),
-                    },
-                }
-            );
+                        MaxResults = 10000,
+                        StartTimeUtc = starttime,
+                        EndTimeUtc = endtime,
+                        Filters = new List<Filter>
+                        {
+                            new("availability-zone", new List<string> { "us-east-1a", "us-east-2a", "us-west-1a", "us-west-2a" }),
+                            new("instance-type", instanceTypes.ToList()),
+                            new("product-description",
+                                new List<string>
+                                {
+                                    "Linux/UNIX",
+                                    "Red Hat Enterprise Linux",
+                                    "SUSE Linux",
+                                    "Windows",
+                                    "Linux/UNIX (Amazon VPC)",
+                                    "Red Hat Enterprise Linux (Amazon VPC)",
+                                    "SUSE Linux (Amazon VPC)",
+                                    "Windows (Amazon VPC)",
+                                }),
+                        },
+                    }
+                );
+            var spotPrices = responses
+                .Select(response =>
+                {
+                    var spotPrice = new SpotPrice()
+                    {
+                        Price = decimal.Parse(response.Price),
+                        Timestamp = response.Timestamp,
+                        AvailabilityZone = response.AvailabilityZone,
+                        InstanceType = response.InstanceType,
+                        ProductDescription = response.ProductDescription
+                    };
+                    return spotPrice;
+                });
+            connection.BulkInsert(spotPrices);
+        }
+        catch (Exception ex)
+        {
+            throw ex;
+        }
+        finally
+        {
+            semaphore.Release();
+        }
     });
+
+await Task.WhenAll(results);
 
 //TODO: standup database and start pushing results in
 

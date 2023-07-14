@@ -58,7 +58,7 @@ public class AwsMultiClient
     /// </summary>
     /// <param name="req">request paramaters for spot price history request</param>
     /// <returns>all spot price history</returns>
-    public async Task<IEnumerable<SpotPrice>> GetSpotPricing(DescribeSpotPriceHistoryRequest req)
+    public async Task<IEnumerable<Amazon.EC2.Model.SpotPrice>> GetSpotPricing(DescribeSpotPriceHistoryRequest req)
     {
         var initialSpotPriceResponsesAsync = RegionalClients
             .Select(async client =>
@@ -90,7 +90,7 @@ public class AwsMultiClient
                         {
                             response.Result.Response?.NextToken,
                             SpotPrices = response.Result.Response?.SpotPriceHistory ??
-                                         new List<SpotPrice>() as IEnumerable<SpotPrice>,
+                                         new List<Amazon.EC2.Model.SpotPrice>() as IEnumerable<Amazon.EC2.Model.SpotPrice>,
                         }, async (task, i) =>
                         {
                             var completedTask = await task;
@@ -123,7 +123,7 @@ public class AwsMultiClient
                                 nextBatch?.NextToken,
                                 SpotPrices =
                                     completedTask.SpotPrices.Concat(
-                                        nextBatch?.SpotPriceHistory ?? new List<SpotPrice>())
+                                        nextBatch?.SpotPriceHistory ?? new List<Amazon.EC2.Model.SpotPrice>())
                             };
                         },
                         arg => { return arg.NextToken == null; });
@@ -148,8 +148,9 @@ public class AwsMultiClient
     /// <param name="end"></param>
     /// <returns></returns>
     /// <exception cref="NotImplementedException"></exception>
-    public async Task<IEnumerable<SpotPrice>> SampleSpotPricing(DescribeSpotPriceHistoryRequest req)
+    public async Task<IEnumerable<Amazon.EC2.Model.SpotPrice>> SampleSpotPricing(DescribeSpotPriceHistoryRequest req)
     {
+        var maxQueriesPerEndpoint = 25;
         var instanceTypes = req.Filters
             .Where(filter => filter.Name.Equals("instance-type"))
             .SelectMany(filter => filter.Values);
@@ -170,12 +171,13 @@ public class AwsMultiClient
         var spotPricesTasks = RegionalClients
             .Select(async client =>
             {
-                var resultTask = Enumerable.Range(0, 15)
+                var resultTask = Enumerable.Range(0, maxQueriesPerEndpoint)
                     .AggregateUntilAsync(
                         new
                         {
                             NextRequest = req,
-                            SpotPrices = new List<SpotPrice>() as IEnumerable<SpotPrice>,
+                            SpotPrices = new List<Amazon.EC2.Model.SpotPrice>() as IEnumerable<Amazon.EC2.Model.SpotPrice>,
+                            FetchCount = 0,
                             Audit = new[]
                             {
                                 new
@@ -195,7 +197,8 @@ public class AwsMultiClient
                                 StartTimeUtc = req.StartTimeUtc,
                                 EndTimeUtc = req.EndTimeUtc,
                                 NextToken = describeSpotPriceHistoryResponse.NextToken,
-                                Filters = req.Filters
+                                Filters = req.Filters,
+                                MaxResults = req.MaxResults,
                             };
 
                             var accumulation = aggregate.Result.SpotPrices
@@ -205,12 +208,13 @@ public class AwsMultiClient
                             {
                                 NextRequest = nextRequest,
                                 SpotPrices = accumulation,
+                                FetchCount = i + 1,
                                 Audit = aggregate.Result.Audit
                                     .Concat(new[]
                                     {
                                         new
                                         {
-                                            FetchCount = i,
+                                            FetchCount = i + 1,
                                             DistinctCount = accumulation
                                                 .DistinctBy(sp => new
                                                 {
@@ -227,6 +231,7 @@ public class AwsMultiClient
                         aggregate =>
                         {
                             var completed = aggregate.SpotPrices
+                                .Where(price => req.StartTimeUtc < price.Timestamp && price.Timestamp < req.EndTimeUtc)
                                 .Select(spotPrice => new
                                 {
                                     instanceType = spotPrice.InstanceType.Value,
@@ -241,10 +246,8 @@ public class AwsMultiClient
                                 .Except(intersection)
                                 .ToList();
 
-                            //TODO: probably just replace this with a minimum dataset spanning 25 or so
                             // distinct combos of instance types + product descriptions
-                            return intersection.Count >= instanceTypesProductDescriptions.Count ||
-                                   aggregate.NextRequest.NextToken == null;
+                            return intersection.Count >= instanceTypesProductDescriptions.Count || aggregate.NextRequest.NextToken == null;
                         });
 
                 var results = await resultTask;

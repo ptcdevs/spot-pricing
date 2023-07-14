@@ -6,7 +6,7 @@ with dates as (select date_trunc('day', dd):: date as day
      hours as (select hour
                from generate_series(0, 23) hour),
 
-     fetched as (select "Timestamp"::date + (interval '1' hour * extract(hour from "Timestamp"::date)) as starttime
+     fetched as (select "Timestamp"::date + (interval '1' hour * extract(hour from "Timestamp")) as starttime
                  from "SpotPrices"),
 
      fetchable as (select d.day + (interval '1' hour * h.hour)                       as starttime,
@@ -17,4 +17,4 @@ with dates as (select date_trunc('day', dd):: date as day
 select f.starttime, f.endtime
 from fetchable f
 where f.startTime not in (select startTime from fetched)
-order by f.starttime desc, f.endtime desc
+order by f.starttime asc, f.endtime asc;
