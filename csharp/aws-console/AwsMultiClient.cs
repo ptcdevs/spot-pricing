@@ -150,7 +150,7 @@ public class AwsMultiClient
     /// <exception cref="NotImplementedException"></exception>
     public async Task<IEnumerable<Amazon.EC2.Model.SpotPrice>> SampleSpotPricing(DescribeSpotPriceHistoryRequest req)
     {
-        var maxQueriesPerEndpoint = 25;
+        var maxQueriesPerEndpoint = 10;
         var instanceTypes = req.Filters
             .Where(filter => filter.Name.Equals("instance-type"))
             .SelectMany(filter => filter.Values);

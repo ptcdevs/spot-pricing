@@ -62,22 +62,24 @@ var instanceTypes = JsonNode.Parse(instanceTypesText)?
 await using var connection = new NpgsqlConnection(npgsqlConnectionStringBuilder.ToString());
 await connection.OpenAsync();
 
-var startEndTimesQuery = File.ReadAllText("queries/dates-hours-tofetch.sql");
-var startEndTimes = connection.Query(startEndTimesQuery)
+var datesToQuerySql = File.ReadAllText("queries/dates-hours-tofetch.sql");
+var datesToQuery = connection.Query(datesToQuerySql)
     .ToList();
-var startEndTimesSubset = startEndTimes
-    .OrderBy(ts => ts.starttime)
-    .Take(25)
+var datesToQuerySubset = datesToQuery
+    .OrderByDescending(ts => ts.querydate)
+    .Take(1)
+    // .Take(1)
     .ToList();
-var semaphore = new SemaphoreSlim(4);
-var results = startEndTimesSubset
-    .Select(async startEndTime =>
+var semaphore = new SemaphoreSlim(10);
+// var semaphore = new SemaphoreSlim(1);
+var results = datesToQuerySubset
+    .Select(async dateToQuery =>
     {
         try
         {
             semaphore.Wait();
-            var starttime = startEndTime.starttime is DateTime ? (DateTime)startEndTime.starttime : default;
-            var endtime = startEndTime.endtime is DateTime ? (DateTime)startEndTime.endtime : default;
+            var starttime = (DateTime)dateToQuery.querydate;
+            var endtime = starttime.AddDays(1);
             var responses = await awsMultiClient
                 .SampleSpotPricing(new DescribeSpotPriceHistoryRequest
                     {
@@ -116,11 +118,12 @@ var results = startEndTimesSubset
                     };
                     return spotPrice;
                 });
+            Console.WriteLine($"finished {dateToQuery.querydate}, retrieved {spotPrices.Count()} records");
             return spotPrices;
         }
         catch (Exception ex)
         {
-            Log.Error(ex, $"error while querying startTime: {startEndTime.starttime}, endTime: {startEndTime.endtime}");
+            Log.Error(ex, $"error while querying date: {dateToQuery.querydate}");
             throw ex;
         }
         finally
@@ -130,11 +133,11 @@ var results = startEndTimesSubset
     });
 
 var spotPrices = await Task.WhenAll(results);
-var queriesRun = startEndTimesSubset
-    .Select(set => new QueryRun()
+var queriesRun = datesToQuerySubset
+    .Select(dateToQuery => new QueryRun()
     {
         Search = "GpuMlMain",
-        StartTime = set.starttime,
+        StartTime = dateToQuery.querydate,
     });
 
 await using var tx = connection.BeginTransaction();

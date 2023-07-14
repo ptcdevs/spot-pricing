@@ -31,7 +31,7 @@
         <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       </None>
       <None Update="queries\dates-hours-tofetch.sql">
-        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        <CopyToOutputDirectory>Always</CopyToOutputDirectory>
       </None>
       <None Update="queries\dedup.sql">
         <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
