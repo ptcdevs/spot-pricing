@@ -1,6 +1,6 @@
 with dates as (select date_trunc('day', dd):: date as queryDate
                from generate_series
-                        (date(current_date - interval '180' day)
+                        (date(current_date - interval '90' day)
                         , current_date
                         , '1 day'::interval) dd),
 
