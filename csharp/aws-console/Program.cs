@@ -64,10 +64,13 @@ await connection.OpenAsync();
 
 var startEndTimesQuery = File.ReadAllText("queries/dates-hours-tofetch.sql");
 var startEndTimes = connection.Query(startEndTimesQuery)
+    .ToList();
+var startEndTimesSubset = startEndTimes
     .OrderBy(ts => ts.starttime)
-    .Take(1);
+    .Take(25)
+    .ToList();
 var semaphore = new SemaphoreSlim(4);
-var results = startEndTimes
+var results = startEndTimesSubset
     .Select(async startEndTime =>
     {
         try
@@ -127,7 +130,7 @@ var results = startEndTimes
     });
 
 var spotPrices = await Task.WhenAll(results);
-var queriesRun = startEndTimes
+var queriesRun = startEndTimesSubset
     .Select(set => new QueryRun()
     {
         Search = "GpuMlMain",
@@ -141,5 +144,5 @@ await tx.CommitAsync();
 
 //TODO: standup database and start pushing results in
 
-Log.Information($"ran {string.Join(",",queriesRun.Select(q => q.StartTime.ToString("u")))}");
+Log.Information($"ran {string.Join("\n",queriesRun.Select(q => q.StartTime.ToString("u")))}");
 Log.Information("fin");
