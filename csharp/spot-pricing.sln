@@ -4,6 +4,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "aws-console", "aws-console\
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "aws-migration", "aws-migration\aws-migration.csproj", "{A1031180-9C1A-4650-A269-3D8B0C778882}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "aws-restapi", "aws-restapi\aws-restapi.csproj", "{7124D26D-1F50-4E7B-A032-24DE1D6AE8CC}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -18,5 +20,9 @@ Global
 		{A1031180-9C1A-4650-A269-3D8B0C778882}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{A1031180-9C1A-4650-A269-3D8B0C778882}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{A1031180-9C1A-4650-A269-3D8B0C778882}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7124D26D-1F50-4E7B-A032-24DE1D6AE8CC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7124D26D-1F50-4E7B-A032-24DE1D6AE8CC}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7124D26D-1F50-4E7B-A032-24DE1D6AE8CC}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7124D26D-1F50-4E7B-A032-24DE1D6AE8CC}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
