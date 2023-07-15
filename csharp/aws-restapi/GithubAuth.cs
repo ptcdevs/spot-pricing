@@ -1,3 +1,4 @@
+using AspNet.Security.OAuth.GitHub;
 using Microsoft.AspNetCore.Authorization;
 
 namespace aws_restapi;

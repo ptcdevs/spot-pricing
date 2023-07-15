@@ -19,6 +19,15 @@
       <PackageReference Include="Microsoft.AspNet.WebApi.Core" Version="5.2.9" />
       <PackageReference Include="Serilog" Version="3.0.2-dev-02044" />
       <PackageReference Include="Serilog.Sinks.Console" Version="4.1.0" />
+      <PackageReference Include="Swashbuckle.AspNetCore.Swagger" Version="6.5.0" />
+      <PackageReference Include="Swashbuckle.AspNetCore.SwaggerGen" Version="6.5.0" />
+      <PackageReference Include="Swashbuckle.AspNetCore.SwaggerUI" Version="6.5.0" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <Reference Include="AWSSDK.Core">
+        <HintPath>..\..\..\..\.nuget\packages\awssdk.core\3.7.108.1\lib\netcoreapp3.1\AWSSDK.Core.dll</HintPath>
+      </Reference>
     </ItemGroup>
 
 </Project>
