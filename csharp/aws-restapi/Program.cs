@@ -84,6 +84,12 @@ var npgsqlConnectionStringBuilder = new NpgsqlConnectionStringBuilder()
 };
 builder.Services.AddScoped<NpgsqlConnection>(provider =>
     new NpgsqlConnection(npgsqlConnectionStringBuilder.ToString()));
+DapperPlusManager.Entity<SpotPrice>()
+    .Table("SpotPrices")
+    .Identity(x => x.Id);
+DapperPlusManager.Entity<QueryRun>()
+    .Table("QueriesRun")
+    .Identity(x => x.Id);
 
 //aws config
 builder.Services.AddScoped<AwsMultiClient>(provider =>
@@ -106,8 +112,15 @@ builder.Services.AddScoped<AwsMultiClient>(provider =>
 builder.Services
     .AddAuthorization(GithubAuth.CustomPolicy());
 var app = builder.Build();
+
 app.UseAuthentication();
 app.UseAuthorization();
+
+app.UseSwagger();
+app.UseSwaggerUI(options =>
+{
+    options.SwaggerEndpoint("/swagger/v1/swagger.json", $"{builder.Environment.ApplicationName} v1");
+});
 app.MapGet("/", () => "Hello World!")
     .RequireAuthorization("ValidGithubUser");
 app.MapGet("authorize", () => "authorized")
@@ -122,7 +135,7 @@ app.MapGet("syncpricing", async (NpgsqlConnection connection, AwsMultiClient aws
             .ToList();
         var datesToQuerySubset = datesToQuery
             .OrderByDescending(ts => ts.querydate)
-            .Take(1)
+            .Take(25)
             .ToList();
         var semaphore = new SemaphoreSlim(10);
         var results = datesToQuerySubset
@@ -175,7 +188,10 @@ app.MapGet("syncpricing", async (NpgsqlConnection connection, AwsMultiClient aws
                 }
             });
 
-        var spotPrices = await Task.WhenAll(results);
+        var spotPricesBatches = await Task.WhenAll(results);
+        var spotPrices = spotPricesBatches
+            .SelectMany(spotPriceBatch => spotPriceBatch)
+            .ToList();
         var queriesRun = datesToQuerySubset
             .Select(dateToQuery => new QueryRun()
             {
@@ -190,16 +206,12 @@ app.MapGet("syncpricing", async (NpgsqlConnection connection, AwsMultiClient aws
         return Results.Json(new
         {
             success = true,
-            datesQueried = queriesRun.Select(q => q.StartTime)
+            datesQueried = queriesRun.Select(q => q.StartTime),
+            spotPricesInserted = spotPrices.Count()
         });
     })
     .WithName("SyncPricing")
     .WithDisplayName("SyncPricing")
     .RequireAuthorization("ValidGithubUser");
-app.UseSwagger();
-app.UseSwaggerUI(options =>
-{
-    options.SwaggerEndpoint("/swagger/v1/swagger.json", $"{builder.Environment.ApplicationName} v1");
-});
 
 app.Run();
