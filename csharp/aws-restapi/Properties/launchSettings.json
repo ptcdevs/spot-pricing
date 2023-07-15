@@ -1,27 +1,13 @@
-﻿{
-  "iisSettings": {
-    "windowsAuthentication": false,
-    "anonymousAuthentication": true,
-    "iisExpress": {
-      "applicationUrl": "http://localhost:1546",
-      "sslPort": 44349
-    }
-  },
+{
   "profiles": {
     "aws_restapi": {
       "commandName": "Project",
       "dotnetRunMessages": true,
-      "launchBrowser": true,
-      "applicationUrl": "https://localhost:7237;http://localhost:5005",
+      "launchBrowser": false,
+      "applicationUrl": "http://localhost:3000;https://localhost:3001",
       "environmentVariables": {
-        "ASPNETCORE_ENVIRONMENT": "Development"
-      }
-    },
-    "IIS Express": {
-      "commandName": "IISExpress",
-      "launchBrowser": true,
-      "environmentVariables": {
-        "ASPNETCORE_ENVIRONMENT": "Development"
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "GITHUB_OAUTH_CLIENT_SECRET": "37a37d6c50667bd505aed9cb5738d6c01695f970"
       }
     }
   }
