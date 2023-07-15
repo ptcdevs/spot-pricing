@@ -1,6 +1,8 @@
-using AspNet.Security.OAuth.GitHub;
+using aws_restapi;
 using Microsoft.AspNetCore.Authentication.Cookies;
-using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Serilog;
+using Serilog.Events;
 
 var configuration = new ConfigurationBuilder()
     .SetBasePath(Directory.GetCurrentDirectory())
@@ -8,6 +10,11 @@ var configuration = new ConfigurationBuilder()
     .AddEnvironmentVariables()
     .Build();
 var builder = WebApplication.CreateBuilder(args);
+Log.Logger = new LoggerConfiguration()
+    .WriteTo.Console(builder.Environment.IsProduction()
+        ? LogEventLevel.Error
+        : LogEventLevel.Information)
+    .CreateLogger();
 builder.Services
     .AddAuthentication(options =>
     {
@@ -15,36 +22,25 @@ builder.Services
         options.DefaultSignInScheme = CookieAuthenticationDefaults.AuthenticationScheme;
         options.DefaultChallengeScheme = "GitHub";
     })
-    .AddCookie()
-    .AddGitHub(gitHubAuthenticationOptions =>
+    .AddCookie(cookieOptions =>
     {
-        gitHubAuthenticationOptions.ClientId = configuration["GithubOauth:ClientId"];
-        gitHubAuthenticationOptions.ClientSecret = configuration["GITHUB_OAUTH_CLIENT_SECRET"];
-        gitHubAuthenticationOptions.CallbackPath = "/callback";
-        gitHubAuthenticationOptions.Scope.Add("user:email");
+        cookieOptions.AccessDeniedPath = "/unauthorized";
+    })
+    .AddGitHub(authOptions =>
+    {
+        authOptions.ClientId = configuration["GithubOauth:ClientId"];
+        authOptions.ClientSecret = configuration["GITHUB_OAUTH_CLIENT_SECRET"];
+        authOptions.CallbackPath = "/callback";
+        authOptions.Scope.Add("user:email");
     });
+
 builder.Services
-    .AddAuthorization(config =>
-    {
-        config
-            .AddPolicy("ValidGitHubUser", new AuthorizationPolicyBuilder()
-                .RequireAssertion(context =>
-                {
-                    var authorizedGithubUsers = new[]
-                    {
-                        "vector6234",
-                    };
-    
-                    var githubUser = context.User.Claims
-                        .Where(claim => claim.Type.Equals("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name"))
-                        .Select(claim => claim.Value)
-                        .SingleOrDefault() ?? "";
-                    Console.WriteLine($"github user: {githubUser}");
-    
-                    return authorizedGithubUsers.Contains(githubUser);
-                })
-                .Build());
-    });
+    // .AddAuthorization(config =>
+    // {
+    //     config
+    //         .AddPolicy("ValidGitHubUser", GithubAuth.Policy().Build());
+    // });
+    .AddAuthorization(GithubAuth.CustomPolicy());
 
 var app = builder.Build();
 app.UseAuthentication();
@@ -52,5 +48,7 @@ app.UseAuthorization();
 
 app.MapGet("/", () => "Hello World!")
     .RequireAuthorization("ValidGitHubUser");
+app.MapGet("/unauthorized", () => new UnauthorizedResult());
+
 
 app.Run();
