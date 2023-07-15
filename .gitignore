@@ -39,3 +39,4 @@ Desktop.ini
 /params/instance-types.json
 /csharp/aws-migration/Properties/launchSettings.json
 /data/
+/csharp/aws-restapi/Properties/launchSettings.json
