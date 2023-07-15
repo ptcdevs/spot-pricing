@@ -1,13 +1,20 @@
+using Amazon;
+using Amazon.EC2.Model;
+using Amazon.Pricing;
+using Amazon.Runtime;
 using aws_restapi;
+using aws_restapi.services;
+using Dapper;
 using Microsoft.AspNetCore.Authentication.Cookies;
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.OpenApi.Models;
+using Npgsql;
 using Serilog;
 using Serilog.Events;
+using Z.Dapper.Plus;
 
 #region config
 
-var configuration = new ConfigurationBuilder()
+var config = new ConfigurationBuilder()
     .SetBasePath(Directory.GetCurrentDirectory())
     .AddJsonFile("appsettings.json")
     .AddEnvironmentVariables()
@@ -18,6 +25,8 @@ Log.Logger = new LoggerConfiguration()
         ? LogEventLevel.Error
         : LogEventLevel.Information)
     .CreateLogger();
+
+//authentication
 builder.Services
     .AddAuthentication(options =>
     {
@@ -28,11 +37,13 @@ builder.Services
     .AddCookie(cookieOptions => { cookieOptions.AccessDeniedPath = "/unauthorized"; })
     .AddGitHub(authOptions =>
     {
-        authOptions.ClientId = configuration["GithubOauth:ClientId"];
-        authOptions.ClientSecret = configuration["GITHUB_OAUTH_CLIENT_SECRET"];
+        authOptions.ClientId = config["GithubOauth:ClientId"];
+        authOptions.ClientSecret = config["GITHUB_OAUTH_CLIENT_SECRET"];
         authOptions.CallbackPath = "/callback";
         authOptions.Scope.Add("user:email");
     });
+
+//swagger gen + ui config
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
@@ -61,19 +72,137 @@ builder.Services.AddSwaggerGen(options =>
     options.OperationFilter<GithubAuth.SecurityFilter>();
 });
 
+// database config
+var npgsqlConnectionStringBuilder = new NpgsqlConnectionStringBuilder()
+{
+    Host = config["postgres:host"],
+    Port = int.Parse(config["postgres:port"] ?? string.Empty),
+    Database = config["postgres:database"],
+    Username = config["postgres:username"],
+    Password = config["POSTGRESQL_PASSWORD"],
+    SslMode = SslMode.VerifyCA,
+    RootCertificate = "sql/ptcdevs-psql-ca-certificate.crt",
+};
+builder.Services.AddScoped<NpgsqlConnection>(provider =>
+    new NpgsqlConnection(npgsqlConnectionStringBuilder.ToString()));
+DapperPlusManager.Entity<SpotPrice>()
+    .Table("SpotPrices")
+    .Identity(x => x.Id);
+DapperPlusManager.Entity<QueryRun>()
+    .Table("QueriesRun")
+    .Identity(x => x.Id);
+
+//aws config
+builder.Services.AddScoped<AwsMultiClient>(provider =>
+{
+    return new AwsMultiClient(
+        new[]
+        {
+            RegionEndpoint.USEast1,
+            RegionEndpoint.USEast2,
+            RegionEndpoint.USWest1,
+            RegionEndpoint.USWest2,
+        },
+        new BasicAWSCredentials(
+            config["aws:accessKey"],
+            config["AWSSECRETKEY"]));
+});
+
 #endregion config
 
 builder.Services
     .AddAuthorization(GithubAuth.CustomPolicy());
 var app = builder.Build();
+
 app.UseAuthentication();
 app.UseAuthorization();
+
 app.UseSwagger();
-app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", $"{builder.Environment.ApplicationName} v1"));
+app.UseSwaggerUI(options =>
+{
+    options.SwaggerEndpoint("/swagger/v1/swagger.json", $"{builder.Environment.ApplicationName} v1");
+});
 app.MapGet("/", () => "Hello World!")
     .RequireAuthorization("ValidGithubUser");
-app.MapGet("/authorize", () => "authorized")
+app.MapGet("authorize", () => "authorized")
     .RequireAuthorization("ValidGithubUser");
-app.MapGet("/unauthorized", Results.Unauthorized);
+app.MapGet("unauthorized", () => Results.Unauthorized());
+app.MapGet("syncgpuspotpricing", async (NpgsqlConnection connection, AwsMultiClient awsMultiClient) =>
+    {
+        await connection.OpenAsync();
+
+        var datesToQuerySql = File.ReadAllText("sql/dates-hours-tofetch.sql");
+        var datesToQuery = connection.Query(datesToQuerySql)
+            .ToList();
+        var datesToQuerySubset = datesToQuery
+            .OrderByDescending(ts => ts.querydate)
+            .Take(25)
+            .ToList();
+        var semaphore = new SemaphoreSlim(10);
+        var results = datesToQuerySubset
+            .Select(async dateToQuery =>
+            {
+                try
+                {
+                    semaphore.Wait();
+                    var starttime = (DateTime)dateToQuery.querydate;
+                    var endtime = starttime.AddDays(1);
+                    var instanceTypes = AwsParams.GetGpuInstances();
+                    var spotPrices = await awsMultiClient
+                        .SampleSpotPricing(new DescribeSpotPriceHistoryRequest
+                            {
+                                MaxResults = 10000,
+                                StartTimeUtc = starttime,
+                                EndTimeUtc = endtime,
+                                Filters = new List<Filter>
+                                {
+                                    new("availability-zone",
+                                        new List<string> { "us-east-1a", "us-east-2a", "us-west-1a", "us-west-2a" }),
+                                    new("instance-type", instanceTypes.ToList()),
+                                },
+                            }
+                        );
+                    Log.Information($"finished {dateToQuery.querydate}, retrieved {spotPrices.Count()} records");
+                    return spotPrices;
+                }
+                catch (Exception ex)
+                {
+                    Log.Error(ex, $"error while syncing gpu spot prices for querydate:: {dateToQuery.querydate}");
+                    throw ex;
+                }
+                finally
+                {
+                    semaphore.Release();
+                }
+            });
+
+        var spotPricesBatches = await Task.WhenAll(results);
+        var spotPrices = spotPricesBatches
+            .SelectMany(spotPriceBatch => spotPriceBatch)
+            .ToList();
+        var queriesRun = datesToQuerySubset
+            .Select(dateToQuery => new QueryRun()
+            {
+                Search = "GpuMlMain",
+                StartTime = dateToQuery.querydate,
+            });
+
+        if (spotPrices.Any())
+            connection.BulkInsert(spotPrices);
+        if (queriesRun.Any())
+            connection.BulkInsert(queriesRun);
+        return Results.Json(new
+        {
+            success = true,
+            datesQueried = queriesRun.Select(q => q.StartTime),
+            spotPricesInserted = spotPrices.Count()
+        });
+    })
+    .RequireAuthorization("ValidGithubUser");
+app.MapGet("syncgpuondemandpricing", async (NpgsqlConnection connection, AwsMultiClient awsMultiClient) =>
+    {
+        var pricingClient = new AmazonPricingClient();
+    })
+    .RequireAuthorization("ValidGithubUser");
 
 app.Run();

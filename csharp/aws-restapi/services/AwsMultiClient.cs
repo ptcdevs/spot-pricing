@@ -2,23 +2,27 @@ using System.Diagnostics;
 using Amazon;
 using Amazon.EC2;
 using Amazon.EC2.Model;
+using Amazon.Pricing;
+using Amazon.Pricing.Model;
 using Amazon.Runtime;
 
-namespace aws_console;
+namespace aws_restapi;
 
 public class AwsMultiClient
 {
     public IEnumerable<RegionEndpoint> RegionEndpoints { get; }
     public BasicAWSCredentials Credentials { get; }
-    public IEnumerable<AmazonEC2Client> RegionalClients { get; }
+    public IEnumerable<AmazonEC2Client> RegionalEc2Clients { get; }
+    public IEnumerable<AmazonPricingClient> RegionalPricingClients { get; set; }
 
     public AwsMultiClient(IEnumerable<RegionEndpoint> regionEndpoints, BasicAWSCredentials credentials)
     {
         RegionEndpoints = regionEndpoints;
         Credentials = credentials;
-        RegionalClients = RegionEndpoints
+        RegionalEc2Clients = RegionEndpoints
             .Select(endpoint => new AmazonEC2Client(Credentials, endpoint));
-        //TODO: check creds for each client
+        RegionalPricingClients = RegionEndpoints
+            .Select(endpoint => new AmazonPricingClient(Credentials, endpoint));
     }
 
     /// <summary>
@@ -29,7 +33,7 @@ public class AwsMultiClient
     /// <param name="end"></param>
     /// <returns></returns>
     /// <exception cref="NotImplementedException"></exception>
-    public async Task<List<Amazon.EC2.Model.SpotPrice>> SampleSpotPricing(DescribeSpotPriceHistoryRequest req)
+    public async Task<IEnumerable<SpotPrice>> SampleSpotPricing(DescribeSpotPriceHistoryRequest req)
     {
         var maxQueriesPerEndpoint = 10;
         var instanceTypes = req.Filters
@@ -49,7 +53,7 @@ public class AwsMultiClient
                     });
             })
             .ToList();
-        var spotPricesTasks = RegionalClients
+        var spotPricesTasks = RegionalEc2Clients
             .Select(async client =>
             {
                 var resultTask = Enumerable.Range(0, maxQueriesPerEndpoint)
@@ -57,7 +61,8 @@ public class AwsMultiClient
                         new
                         {
                             NextRequest = req,
-                            SpotPrices = new List<Amazon.EC2.Model.SpotPrice>() as IEnumerable<Amazon.EC2.Model.SpotPrice>,
+                            SpotPrices =
+                                new List<Amazon.EC2.Model.SpotPrice>() as IEnumerable<Amazon.EC2.Model.SpotPrice>,
                             FetchCount = 0,
                             Audit = new[]
                             {
@@ -128,7 +133,8 @@ public class AwsMultiClient
                                 .ToList();
 
                             // distinct combos of instance types + product descriptions
-                            return intersection.Count >= instanceTypesProductDescriptions.Count || aggregate.NextRequest.NextToken == null;
+                            return intersection.Count >= instanceTypesProductDescriptions.Count ||
+                                   aggregate.NextRequest.NextToken == null;
                         });
 
                 var results = await resultTask;
@@ -144,6 +150,57 @@ public class AwsMultiClient
                 sp.ProductDescription
             })
             .ToList();
-        return awsSpotPrices;
+        var spotPrices = awsSpotPrices
+            .Select(response =>
+            {
+                var spotPrice = new SpotPrice()
+                {
+                    Price = decimal.Parse(response.Price),
+                    Timestamp = response.Timestamp,
+                    AvailabilityZone = response.AvailabilityZone,
+                    InstanceType = response.InstanceType,
+                    ProductDescription = response.ProductDescription
+                };
+                return spotPrice;
+            });
+
+        return spotPrices;
+    }
+
+    public async Task<IEnumerable<PriceSchedule>> GetOnDemandPricing()
+    {
+        var client = RegionalPricingClients.First();
+        var describeServicesResponse = await client
+            .DescribeServicesAsync(new DescribeServicesRequest()
+            {
+                MaxResults = 0,
+                NextToken = "",
+                FormatVersion = "",
+                ServiceCode = "",
+            });
+        var getProductsResponse = await client
+            .GetProductsAsync(new GetProductsRequest()
+            {
+                MaxResults = 0,
+                NextToken = "",
+                FormatVersion = "",
+                Filters = new List<Amazon.Pricing.Model.Filter>(),
+                ServiceCode = "",
+            });
+        var listPriceListsResponse = await client.ListPriceListsAsync(new ListPriceListsRequest()
+        {
+            MaxResults = 0,
+            NextToken = "",
+            ServiceCode = "",
+            CurrencyCode = "",
+            EffectiveDate = DateTime.Now,
+            RegionCode = "",
+        });
+        var getPriceListFileUrlResponse = await client.GetPriceListFileUrlAsync(new GetPriceListFileUrlRequest()
+        {
+            FileFormat = "",
+            PriceListArn = "",
+        });
+        throw new NotImplementedException();
     }
 }
