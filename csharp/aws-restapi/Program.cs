@@ -1,10 +1,12 @@
 using Amazon;
 using Amazon.EC2.Model;
+using Amazon.Pricing;
 using Amazon.Runtime;
 using aws_restapi;
 using aws_restapi.services;
 using Dapper;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.OpenApi.Models;
 using Npgsql;
 using Serilog;
 using Serilog.Events;
@@ -45,29 +47,29 @@ builder.Services
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
-    // options.SwaggerDoc("v1", new()
-    // {
-    //     Title = builder.Environment.ApplicationName,
-    //     Version = "v1"
-    // });
-    // options.AddSecurityDefinition("GithubOAuth", new OpenApiSecurityScheme()
-    // {
-    //     Type = SecuritySchemeType.OAuth2,
-    //     Description = "Github OAuth2 with custom user whitelist",
-    //     In = ParameterLocation.Cookie,
-    //     Flows = new OpenApiOAuthFlows()
-    //     {
-    //         AuthorizationCode = new OpenApiOAuthFlow()
-    //         {
-    //             Scopes = new Dictionary<string, string>()
-    //             {
-    //                 { "user:email", "read user email from github" }
-    //             },
-    //             AuthorizationUrl = new Uri("https://github.com/login/oauth/authorize")
-    //         }
-    //     },
-    // });
-    // options.OperationFilter<GithubAuth.SecurityFilter>();
+    options.SwaggerDoc("v1", new()
+    {
+        Title = builder.Environment.ApplicationName,
+        Version = "v1"
+    });
+    options.AddSecurityDefinition("GithubOAuth", new OpenApiSecurityScheme()
+    {
+        Type = SecuritySchemeType.OAuth2,
+        Description = "Github OAuth2 with custom user whitelist",
+        In = ParameterLocation.Cookie,
+        Flows = new OpenApiOAuthFlows()
+        {
+            AuthorizationCode = new OpenApiOAuthFlow()
+            {
+                Scopes = new Dictionary<string, string>()
+                {
+                    { "user:email", "read user email from github" }
+                },
+                AuthorizationUrl = new Uri("https://github.com/login/oauth/authorize")
+            }
+        },
+    });
+    options.OperationFilter<GithubAuth.SecurityFilter>();
 });
 
 // database config
@@ -195,6 +197,11 @@ app.MapGet("syncgpuspotpricing", async (NpgsqlConnection connection, AwsMultiCli
             datesQueried = queriesRun.Select(q => q.StartTime),
             spotPricesInserted = spotPrices.Count()
         });
+    })
+    .RequireAuthorization("ValidGithubUser");
+app.MapGet("syncgpuondemandpricing", async (NpgsqlConnection connection, AwsMultiClient awsMultiClient) =>
+    {
+        var pricingClient = new AmazonPricingClient();
     })
     .RequireAuthorization("ValidGithubUser");
 
