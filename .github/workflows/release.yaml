@@ -26,7 +26,7 @@ jobs:
         uses: docker/build-push-action@v4
         with:
           context: ./csharp
-          file: ./aws-restapi/Dockerfile
+          file: ./csharp/aws-restapi/Dockerfile
           tags: ghcr.io/ptcdevs/aws-restapi:latest
           push: false
 #  release-please:
