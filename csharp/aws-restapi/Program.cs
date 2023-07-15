@@ -42,11 +42,10 @@ builder.Services.AddSwaggerGen(options =>
         Title = builder.Environment.ApplicationName,
         Version = "v1"
     });
-    options.AddSecurityDefinition("dooboo", new OpenApiSecurityScheme()
+    options.AddSecurityDefinition("GithubOAuth", new OpenApiSecurityScheme()
     {
         Type = SecuritySchemeType.OAuth2,
         Description = "Github OAuth2 with custom user whitelist",
-        Name = "Github OAuth2",
         In = ParameterLocation.Cookie,
         Flows = new OpenApiOAuthFlows()
         {
@@ -58,8 +57,9 @@ builder.Services.AddSwaggerGen(options =>
                 },
                 AuthorizationUrl = new Uri("https://github.com/login/oauth/authorize")
             }
-        }
+        },
     });
+    options.OperationFilter<GithubAuth.SecurityFilter>();
 });
 
 #endregion config
@@ -72,10 +72,9 @@ app.UseAuthorization();
 app.UseSwagger();
 app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", $"{builder.Environment.ApplicationName} v1"));
 app.MapGet("/", () => "Hello World!")
-    .RequireAuthorization("ValidGitHubUser");
+    .RequireAuthorization("ValidGithubUser");
 app.MapGet("/authorize", () => "authorized")
-    .RequireAuthorization("ValidGitHubUser");
+    .RequireAuthorization("ValidGithubUser");
 app.MapGet("/unauthorized", () => new UnauthorizedResult());
-
 
 app.Run();
