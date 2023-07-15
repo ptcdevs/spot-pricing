@@ -2,7 +2,6 @@
 
 using System.Text.Json.Nodes;
 using Amazon;
-using Amazon.EC2;
 using Amazon.EC2.Model;
 using Amazon.Runtime;
 using aws_console;
