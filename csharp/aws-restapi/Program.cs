@@ -35,11 +35,6 @@ builder.Services
     });
 
 builder.Services
-    // .AddAuthorization(config =>
-    // {
-    //     config
-    //         .AddPolicy("ValidGitHubUser", GithubAuth.Policy().Build());
-    // });
     .AddAuthorization(GithubAuth.CustomPolicy());
 
 var app = builder.Build();
