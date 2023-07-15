@@ -72,7 +72,7 @@ var datesToQuerySubset = datesToQuery
     .ToList();
 var semaphore = new SemaphoreSlim(10);
 // var semaphore = new SemaphoreSlim(1);
-var results = datesToQuerySubset
+IEnumerable<Task<IEnumerable<SpotPrice>>> results = datesToQuerySubset
     .Select(async dateToQuery =>
     {
         try
@@ -90,18 +90,6 @@ var results = datesToQuerySubset
                         {
                             new("availability-zone", new List<string> { "us-east-1a", "us-east-2a", "us-west-1a", "us-west-2a" }),
                             new("instance-type", instanceTypes.ToList()),
-                            new("product-description",
-                                new List<string>
-                                {
-                                    "Linux/UNIX",
-                                    "Red Hat Enterprise Linux",
-                                    "SUSE Linux",
-                                    "Windows",
-                                    "Linux/UNIX (Amazon VPC)",
-                                    "Red Hat Enterprise Linux (Amazon VPC)",
-                                    "SUSE Linux (Amazon VPC)",
-                                    "Windows (Amazon VPC)",
-                                }),
                         },
                     }
                 );
