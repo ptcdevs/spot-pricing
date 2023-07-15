@@ -25,9 +25,9 @@ jobs:
       - name: Build docker image
         uses: docker/build-push-action@v3
         with:
-          context: ./csharp/aws-restapi
+          context: ./csharp/aws-restapi/
           tags: ghcr.io/ptcdevs/aws-restapi:latest
-          push: true
+          push: false
 #  release-please:
 #    needs:
 #      - build-app
