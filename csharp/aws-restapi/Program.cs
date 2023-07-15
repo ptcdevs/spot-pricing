@@ -1,7 +1,6 @@
 using Amazon;
 using Amazon.EC2.Model;
 using Amazon.Runtime;
-using aws_console;
 using aws_restapi;
 using aws_restapi.services;
 using Dapper;
@@ -126,7 +125,7 @@ app.MapGet("/", () => "Hello World!")
 app.MapGet("authorize", () => "authorized")
     .RequireAuthorization("ValidGithubUser");
 app.MapGet("unauthorized", () => Results.Unauthorized());
-app.MapGet("syncpricing", async (NpgsqlConnection connection, AwsMultiClient awsMultiClient) =>
+app.MapGet("syncgpuspotpricing", async (NpgsqlConnection connection, AwsMultiClient awsMultiClient) =>
     {
         await connection.OpenAsync();
 
@@ -147,7 +146,7 @@ app.MapGet("syncpricing", async (NpgsqlConnection connection, AwsMultiClient aws
                     var starttime = (DateTime)dateToQuery.querydate;
                     var endtime = starttime.AddDays(1);
                     var instanceTypes = AwsParams.GetGpuInstances();
-                    var responses = await awsMultiClient
+                    var spotPrices = await awsMultiClient
                         .SampleSpotPricing(new DescribeSpotPriceHistoryRequest
                             {
                                 MaxResults = 10000,
@@ -161,25 +160,12 @@ app.MapGet("syncpricing", async (NpgsqlConnection connection, AwsMultiClient aws
                                 },
                             }
                         );
-                    var spotPrices = responses
-                        .Select(response =>
-                        {
-                            var spotPrice = new SpotPrice()
-                            {
-                                Price = decimal.Parse(response.Price),
-                                Timestamp = response.Timestamp,
-                                AvailabilityZone = response.AvailabilityZone,
-                                InstanceType = response.InstanceType,
-                                ProductDescription = response.ProductDescription
-                            };
-                            return spotPrice;
-                        });
-                    Console.WriteLine($"finished {dateToQuery.querydate}, retrieved {spotPrices.Count()} records");
+                    Log.Information($"finished {dateToQuery.querydate}, retrieved {spotPrices.Count()} records");
                     return spotPrices;
                 }
                 catch (Exception ex)
                 {
-                    Log.Error(ex, $"error while querying date: {dateToQuery.querydate}");
+                    Log.Error(ex, $"error while syncing gpu spot prices for querydate:: {dateToQuery.querydate}");
                     throw ex;
                 }
                 finally
@@ -210,8 +196,6 @@ app.MapGet("syncpricing", async (NpgsqlConnection connection, AwsMultiClient aws
             spotPricesInserted = spotPrices.Count()
         });
     })
-    .WithName("SyncPricing")
-    .WithDisplayName("SyncPricing")
     .RequireAuthorization("ValidGithubUser");
 
 app.Run();

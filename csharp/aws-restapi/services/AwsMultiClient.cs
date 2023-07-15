@@ -4,7 +4,7 @@ using Amazon.EC2;
 using Amazon.EC2.Model;
 using Amazon.Runtime;
 
-namespace aws_console;
+namespace aws_restapi;
 
 public class AwsMultiClient
 {
@@ -29,7 +29,7 @@ public class AwsMultiClient
     /// <param name="end"></param>
     /// <returns></returns>
     /// <exception cref="NotImplementedException"></exception>
-    public async Task<List<Amazon.EC2.Model.SpotPrice>> SampleSpotPricing(DescribeSpotPriceHistoryRequest req)
+    public async Task<IEnumerable<SpotPrice>> SampleSpotPricing(DescribeSpotPriceHistoryRequest req)
     {
         var maxQueriesPerEndpoint = 10;
         var instanceTypes = req.Filters
@@ -144,6 +144,20 @@ public class AwsMultiClient
                 sp.ProductDescription
             })
             .ToList();
-        return awsSpotPrices;
+        var spotPrices = awsSpotPrices
+            .Select(response =>
+            {
+                var spotPrice = new SpotPrice()
+                {
+                    Price = decimal.Parse(response.Price),
+                    Timestamp = response.Timestamp,
+                    AvailabilityZone = response.AvailabilityZone,
+                    InstanceType = response.InstanceType,
+                    ProductDescription = response.ProductDescription
+                };
+                return spotPrice;
+            });
+
+        return spotPrices;
     }
 }
