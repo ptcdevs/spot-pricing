@@ -31,18 +31,16 @@ public abstract class GithubAuth
     {
         public void Apply(OpenApiOperation operation, OperationFilterContext context)
         {
-            var metaData = context
+            var validGithubUserAuth = context
                 .ApiDescription
                 .ActionDescriptor
-                .EndpointMetadata;
-            var authAttributes = metaData
-                .OfType<AuthorizeAttribute>();
-            var validGithubUserAuth = authAttributes
-                .Any(authAttr => authAttr.Policy.Equals("ValidGithubUser"));
+                .EndpointMetadata
+                .OfType<AuthorizeAttribute>()
+                .Any(authAttr => authAttr.Policy is "ValidGithubUser");
 
             var githubCustomRequirement = new List<OpenApiSecurityRequirement>
             {
-                new OpenApiSecurityRequirement()
+                new()
                 {
                     {
                         new OpenApiSecurityScheme()

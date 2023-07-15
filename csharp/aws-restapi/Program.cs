@@ -1,4 +1,3 @@
-using Amazon.Runtime.Internal.Transform;
 using aws_restapi;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Mvc;
@@ -53,7 +52,7 @@ builder.Services.AddSwaggerGen(options =>
             {
                 Scopes = new Dictionary<string, string>()
                 {
-                    new("user:email","read user email from github")
+                    { "user:email", "read user email from github" }
                 },
                 AuthorizationUrl = new Uri("https://github.com/login/oauth/authorize")
             }
@@ -75,6 +74,6 @@ app.MapGet("/", () => "Hello World!")
     .RequireAuthorization("ValidGithubUser");
 app.MapGet("/authorize", () => "authorized")
     .RequireAuthorization("ValidGithubUser");
-app.MapGet("/unauthorized", () => new UnauthorizedResult());
+app.MapGet("/unauthorized", Results.Unauthorized);
 
 app.Run();
