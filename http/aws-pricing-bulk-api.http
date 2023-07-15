@@ -1,0 +1,19 @@
+### offer index file
+GET https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/index.json
+Accept: application/json
+
+### version index file
+GET https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/index.json
+Accept: application/json
+
+###  region index file
+GET https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/current/region_index.json
+Accept: application/json
+
+###  current version (big file)
+GET https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/current/index.json
+Accept: application/json
+
+###  old version (big file)
+GET https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/20230705170251/index.json
+Accept: application/json
