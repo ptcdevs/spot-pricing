@@ -6,6 +6,10 @@ namespace aws_restapi;
 
 public abstract class GithubAuth
 {
+    /// <summary>
+    /// this is a custom github policy, whitelisting specific users; moved here to declutter Program.cs
+    /// </summary>
+    /// <returns></returns>
     public static Action<AuthorizationOptions> CustomPolicy() =>
         options =>
         {
@@ -27,6 +31,9 @@ public abstract class GithubAuth
                 }).Build());
         };
 
+    /// <summary>
+    /// this class decorates the swagger doc (and ui) with oauth labels for methods requiring authorization
+    /// </summary>
     public class SecurityFilter : IOperationFilter
     {
         public void Apply(OpenApiOperation operation, OperationFilterContext context)
