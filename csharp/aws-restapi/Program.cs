@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Amazon;
 using Amazon.EC2.Model;
 using Amazon.Pricing;
@@ -129,14 +130,16 @@ app.MapGet("authorize", () => "authorized")
 app.MapGet("unauthorized", () => Results.Unauthorized());
 app.MapGet("syncgpuspotpricing", async (NpgsqlConnection connection, AwsMultiClient awsMultiClient) =>
     {
+        var stopWatch = new Stopwatch();
+        stopWatch.Start();
         await connection.OpenAsync();
 
-        var datesToQuerySql = File.ReadAllText("sql/dates-hours-tofetch.sql");
+        var datesToQuerySql = File.ReadAllText("sql/gpu-spotprice-datehours-tofetch.sql");
         var datesToQuery = connection.Query(datesToQuerySql)
             .ToList();
         var datesToQuerySubset = datesToQuery
-            .OrderByDescending(ts => ts.querydate)
-            .Take(25)
+            .OrderByDescending(ts => ts.starttime)
+            .Take(250)
             .ToList();
         var semaphore = new SemaphoreSlim(10);
         var results = datesToQuerySubset
@@ -145,8 +148,8 @@ app.MapGet("syncgpuspotpricing", async (NpgsqlConnection connection, AwsMultiCli
                 try
                 {
                     semaphore.Wait();
-                    var starttime = (DateTime)dateToQuery.querydate;
-                    var endtime = starttime.AddDays(1);
+                    var starttime = (DateTime)dateToQuery.starttime;
+                    var endtime = starttime.AddHours(1);
                     var instanceTypes = AwsParams.GetGpuInstances();
                     var spotPrices = await awsMultiClient
                         .SampleSpotPricing(new DescribeSpotPriceHistoryRequest
@@ -156,18 +159,17 @@ app.MapGet("syncgpuspotpricing", async (NpgsqlConnection connection, AwsMultiCli
                                 EndTimeUtc = endtime,
                                 Filters = new List<Filter>
                                 {
-                                    new("availability-zone",
-                                        new List<string> { "us-east-1a", "us-east-2a", "us-west-1a", "us-west-2a" }),
+                                    new("availability-zone", new List<string> { "us-east-1a", "us-east-2a", "us-west-1a", "us-west-2a" }),
                                     new("instance-type", instanceTypes.ToList()),
                                 },
                             }
                         );
-                    Log.Information($"finished {dateToQuery.querydate}, retrieved {spotPrices.Count()} records");
+                    Log.Information($"finished {dateToQuery.starttime}, retrieved {spotPrices.Count()} records");
                     return spotPrices;
                 }
                 catch (Exception ex)
                 {
-                    Log.Error(ex, $"error while syncing gpu spot prices for querydate:: {dateToQuery.querydate}");
+                    Log.Error(ex, $"error while syncing gpu spot prices for querydate:: {dateToQuery.starttime}");
                     throw ex;
                 }
                 finally
@@ -184,18 +186,26 @@ app.MapGet("syncgpuspotpricing", async (NpgsqlConnection connection, AwsMultiCli
             .Select(dateToQuery => new QueryRun()
             {
                 Search = "GpuMlMain",
-                StartTime = dateToQuery.querydate,
+                StartTime = dateToQuery.starttime,
             });
 
         if (spotPrices.Any())
             connection.BulkInsert(spotPrices);
         if (queriesRun.Any())
             connection.BulkInsert(queriesRun);
+        // var spotPricesToDedupSql = await File.ReadAllTextAsync("sql/spotPricesToDedup.sql");
+        var dedupSql = await File.ReadAllTextAsync("sql/dedup.sql");
+        // var spotPricesToDedup = await connection.ExecuteAsync(spotPricesToDedupSql);
+        var dedupResult = connection.Execute(dedupSql);
+        stopWatch.Stop();
+        
         return Results.Json(new
         {
             success = true,
-            datesQueried = queriesRun.Select(q => q.StartTime),
-            spotPricesInserted = spotPrices.Count()
+            spotPricesInserted = spotPrices.Count(),
+            duplicateRowsDeleted = dedupResult,
+            timeToCompletion = stopWatch.Elapsed,
+            dateTimesQueried = queriesRun.Select(q => q.StartTime),
         });
     })
     .RequireAuthorization("ValidGithubUser");
