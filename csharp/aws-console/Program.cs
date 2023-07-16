@@ -48,6 +48,10 @@ var awsMultiClient = new AwsMultiClient(
         config["aws:accessKey"],
         config["AWSSECRETKEY"]));
 // await awsMultiClient.PricingApiDemo();
-await awsMultiClient.DownloadPriceFiles();
+var priceFileDownloadUrls = await awsMultiClient.GetPriceFileDownloadUrlsAsync();
+var downloads = priceFileDownloadUrls
+    .Select(async priceFileDownloadUrl => await awsMultiClient.DownloadPriceFileAsync(priceFileDownloadUrl.Url))
+    .ToList();
 
+await Task.WhenAll(downloads);
 Log.Information("fin");

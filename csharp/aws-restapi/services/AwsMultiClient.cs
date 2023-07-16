@@ -1,15 +1,14 @@
-using System.Diagnostics;
 using System.Globalization;
 using Amazon;
 using Amazon.EC2;
 using Amazon.EC2.Model;
-using Amazon.Internal;
 using Amazon.Pricing;
 using Amazon.Pricing.Model;
 using Amazon.Runtime;
 using aws_restapi.services;
-using Newtonsoft.Json;
+using CsvHelper;
 using Newtonsoft.Json.Linq;
+using Filter = Amazon.Pricing.Model.Filter;
 
 namespace aws_restapi;
 
@@ -173,12 +172,11 @@ public class AwsMultiClient
         return spotPrices;
     }
 
-    public async Task<IEnumerable<PriceSchedule>> DownloadPriceFiles()
+    public async Task<GetPriceListFileUrlResponse[]> GetPriceFileDownloadUrlsAsync()
     {
         var client = RegionalPricingClients.First();
         var serviceCode = "AmazonEC2";
         var formatVersion = "aws_v1";
-        var regionCode = "us-east-1";
         var regionCodes = new[] { "us-east-1", "us-east-2", "us-west-1", "us-west-2" };
         var currencyCode = "USD";
         var httpClient = new HttpClient();
@@ -203,8 +201,7 @@ public class AwsMultiClient
                         ServiceCode = serviceCode,
                         CurrencyCode = currencyCode,
                         EffectiveDate = effectiveDate,
-                        // RegionCode = regionCode,
-                        // NextToken = "",
+                        // RegionCode = regionCodes.First(),
                     });
 
                 return new
@@ -234,11 +231,7 @@ public class AwsMultiClient
             }))
             .ToList();
         var downloadUrls = await Task.WhenAll(downloadUrlsResponse);
-
-        // var fileStream = new FileStream("", FileMode.OpenOrCreate, FileAccess.Write);
-        // var streamWriter = new StreamWriter(fileStream);
-
-        throw new NotImplementedException();
+        return downloadUrls;
     }
 
     public async Task<IEnumerable<PriceSchedule>> PricingApiDemo()
@@ -265,15 +258,15 @@ public class AwsMultiClient
                 .GetProductsAsync(new GetProductsRequest()
                 {
                     MaxResults = 100,
-                    Filters = new List<Amazon.Pricing.Model.Filter>
+                    Filters = new List<Filter>
                     {
-                        new Amazon.Pricing.Model.Filter()
+                        new Filter()
                         {
                             Field = "instanceType",
                             Type = FilterType.TERM_MATCH,
                             Value = p4,
                         },
-                        new Amazon.Pricing.Model.Filter()
+                        new Filter()
                         {
                             Field = "regionCode",
                             Type = FilterType.TERM_MATCH,
@@ -310,6 +303,30 @@ public class AwsMultiClient
         catch (Exception ex)
         {
             throw ex;
+        }
+
+        throw new NotImplementedException();
+    }
+
+    public async Task<object> DownloadPriceFileAsync(string priceFileDownloadUrl)
+    {
+        var httpClient = new HttpClient();
+        var response = await httpClient.GetStreamAsync(priceFileDownloadUrl);
+        using var streamRdr = new StreamReader(response);
+        var line1 = await streamRdr.ReadLineAsync();
+        var line2 = await streamRdr.ReadLineAsync();
+        var line3 = await streamRdr.ReadLineAsync();
+        var line4 = await streamRdr.ReadLineAsync();
+        var line5 = await streamRdr.ReadLineAsync();
+        //line six is first column line
+        // var line6 = await streamRdr.ReadLineAsync();
+        using var csv = new CsvReader(streamRdr, CultureInfo.InvariantCulture);
+        await csv.ReadAsync();
+        csv.ReadHeader();
+        while (csv.Read())
+        {
+            var record = csv.GetRecord<dynamic>();
+            // Do something with the record.
         }
 
         throw new NotImplementedException();
