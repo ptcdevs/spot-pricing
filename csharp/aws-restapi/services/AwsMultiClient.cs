@@ -166,6 +166,8 @@ public class AwsMultiClient
                     InstanceType = response.InstanceType,
                     ProductDescription = response.ProductDescription
                 };
+                var utime = spotPrice.Timestamp.ToString("u");
+                var rtime = spotPrice.Timestamp.ToString("R");
                 return spotPrice;
             });
 
@@ -323,6 +325,7 @@ public class AwsMultiClient
         using var csv = new CsvReader(streamRdr, CultureInfo.InvariantCulture);
         await csv.ReadAsync();
         csv.ReadHeader();
+        //TODO: probably skip csv processing at this point and just shove raw lines into db, to parse later
         while (csv.Read())
         {
             var record = csv.GetRecord<dynamic>();
