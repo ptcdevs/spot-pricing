@@ -166,8 +166,6 @@ public class AwsMultiClient
                     InstanceType = response.InstanceType,
                     ProductDescription = response.ProductDescription
                 };
-                var utime = spotPrice.Timestamp.ToString("u");
-                var rtime = spotPrice.Timestamp.ToString("R");
                 return spotPrice;
             });
 
