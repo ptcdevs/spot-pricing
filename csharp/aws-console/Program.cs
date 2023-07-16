@@ -47,6 +47,7 @@ var awsMultiClient = new AwsMultiClient(
     new BasicAWSCredentials(
         config["aws:accessKey"],
         config["AWSSECRETKEY"]));
-await awsMultiClient.PricingApiDemo();
+// await awsMultiClient.PricingApiDemo();
+await awsMultiClient.DownloadPriceFiles();
 
 Log.Information("fin");

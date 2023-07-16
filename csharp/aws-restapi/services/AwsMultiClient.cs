@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using Amazon;
 using Amazon.EC2;
 using Amazon.EC2.Model;
@@ -8,6 +9,7 @@ using Amazon.Pricing.Model;
 using Amazon.Runtime;
 using aws_restapi.services;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace aws_restapi;
 
@@ -171,6 +173,74 @@ public class AwsMultiClient
         return spotPrices;
     }
 
+    public async Task<IEnumerable<PriceSchedule>> DownloadPriceFiles()
+    {
+        var client = RegionalPricingClients.First();
+        var serviceCode = "AmazonEC2";
+        var formatVersion = "aws_v1";
+        var regionCode = "us-east-1";
+        var regionCodes = new[] { "us-east-1", "us-east-2", "us-west-1", "us-west-2" };
+        var currencyCode = "USD";
+        var httpClient = new HttpClient();
+        var versionIndexFileResponse = await httpClient
+            .GetAsync("https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/index.json");
+        var versionIndexJson = await versionIndexFileResponse.Content.ReadAsStringAsync();
+        var versionIndex = JObject.Parse(versionIndexJson);
+        var effectiveDates = versionIndex["versions"]
+            .Select(jToken => ((JProperty)jToken).Name)
+            .Select(effectiveDate =>
+                DateTime.ParseExact(effectiveDate, "yyyyMMddHHmmss", CultureInfo.InvariantCulture).Date)
+            .Where(effectiveDate => effectiveDate.Year >= 2023)
+            .OrderByDescending(dt => dt)
+            .ToList();
+        var listPriceListsResponses = effectiveDates
+            .Select(async effectiveDate =>
+            {
+                var priceListsResponse = await client.ListPriceListsAsync(
+                    new ListPriceListsRequest()
+                    {
+                        MaxResults = 100,
+                        ServiceCode = serviceCode,
+                        CurrencyCode = currencyCode,
+                        EffectiveDate = effectiveDate,
+                        // RegionCode = regionCode,
+                        // NextToken = "",
+                    });
+
+                return new
+                {
+                    effectiveDate,
+                    priceListsResponse
+                };
+            });
+        var listPriceLists = await Task.WhenAll(listPriceListsResponses);
+        var priceListArns = listPriceLists
+            .SelectMany(priceList =>
+                priceList
+                    .priceListsResponse
+                    .PriceLists
+                    .Where(pl => regionCodes.Contains(pl.RegionCode))
+                    .Select(pl => new
+                    {
+                        priceList.effectiveDate,
+                        priceListArn = pl.PriceListArn,
+                        regionCode = pl.RegionCode
+                    }));
+        var downloadUrlsResponse = priceListArns
+            .Select(async priceListArn => await client.GetPriceListFileUrlAsync(new GetPriceListFileUrlRequest()
+            {
+                FileFormat = "csv",
+                PriceListArn = priceListArn.priceListArn,
+            }))
+            .ToList();
+        var downloadUrls = await Task.WhenAll(downloadUrlsResponse);
+
+        // var fileStream = new FileStream("", FileMode.OpenOrCreate, FileAccess.Write);
+        // var streamWriter = new StreamWriter(fileStream);
+
+        throw new NotImplementedException();
+    }
+
     public async Task<IEnumerable<PriceSchedule>> PricingApiDemo()
     {
         var client = RegionalPricingClients.First();
@@ -217,10 +287,10 @@ public class AwsMultiClient
             var priceLists = getProductsResponse.PriceList;
             var getAttributeValuesResponse = await client.GetAttributeValuesAsync(new GetAttributeValuesRequest()
             {
-               MaxResults = 1,
-               ServiceCode = serviceCode,
-               AttributeName = "operatingSystem"
-               //NextToken = ""
+                MaxResults = 1,
+                ServiceCode = serviceCode,
+                AttributeName = "operatingSystem"
+                //NextToken = ""
             });
             var listPriceListsResponse = await client.ListPriceListsAsync(new ListPriceListsRequest()
             {
