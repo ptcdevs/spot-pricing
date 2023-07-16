@@ -25,3 +25,10 @@ csharp/aws-console/params/gpu-instances.json: params/gpu-instances.json
 gpu-instances: csharp/aws-console/params/gpu-instances.json
 
 .PHONY: params/gpu-instances.json csharp/aws-console/params/gpu-instances.json
+
+pricing-describe-services:
+	aws pricing describe-services --region us-east-1 --service-code AmazonEC2 --format-version aws_v1 --max-items 1
+	
+#pricing-get-:
+#	aws pricing describe-services --region us-east-1 --service-code AmazonEC2 --format-version aws_v1 --max-items 1
+#	

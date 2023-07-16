@@ -2,9 +2,12 @@ using System.Diagnostics;
 using Amazon;
 using Amazon.EC2;
 using Amazon.EC2.Model;
+using Amazon.Internal;
 using Amazon.Pricing;
 using Amazon.Pricing.Model;
 using Amazon.Runtime;
+using aws_restapi.services;
+using Newtonsoft.Json;
 
 namespace aws_restapi;
 
@@ -22,6 +25,7 @@ public class AwsMultiClient
         RegionalEc2Clients = RegionEndpoints
             .Select(endpoint => new AmazonEC2Client(Credentials, endpoint));
         RegionalPricingClients = RegionEndpoints
+            .Where(e => e.SystemName.Equals("us-east-1"))
             .Select(endpoint => new AmazonPricingClient(Credentials, endpoint));
     }
 
@@ -167,40 +171,77 @@ public class AwsMultiClient
         return spotPrices;
     }
 
-    public async Task<IEnumerable<PriceSchedule>> GetOnDemandPricing()
+    public async Task<IEnumerable<PriceSchedule>> PricingApiDemo()
     {
         var client = RegionalPricingClients.First();
-        var describeServicesResponse = await client
-            .DescribeServicesAsync(new DescribeServicesRequest()
-            {
-                MaxResults = 0,
-                NextToken = "",
-                FormatVersion = "",
-                ServiceCode = "",
-            });
-        var getProductsResponse = await client
-            .GetProductsAsync(new GetProductsRequest()
-            {
-                MaxResults = 0,
-                NextToken = "",
-                FormatVersion = "",
-                Filters = new List<Amazon.Pricing.Model.Filter>(),
-                ServiceCode = "",
-            });
-        var listPriceListsResponse = await client.ListPriceListsAsync(new ListPriceListsRequest()
+        var serviceCode = "AmazonEC2";
+        var formatVersion = "aws_v1";
+        var regionCode = "us-east-1";
+        var currencyCode = "USD";
+        try
         {
-            MaxResults = 0,
-            NextToken = "",
-            ServiceCode = "",
-            CurrencyCode = "",
-            EffectiveDate = DateTime.Now,
-            RegionCode = "",
-        });
-        var getPriceListFileUrlResponse = await client.GetPriceListFileUrlAsync(new GetPriceListFileUrlRequest()
+            var gpuInstanceTypes = AwsParams.GetGpuInstances();
+            var p4 = gpuInstanceTypes
+                .Single(t => t.Contains("p4"));
+            var describeServicesResponse = await client
+                .DescribeServicesAsync(new DescribeServicesRequest()
+                {
+                    MaxResults = 1,
+                    FormatVersion = formatVersion,
+                    ServiceCode = serviceCode,
+                    // NextToken = "",
+                });
+            var getProductsResponse = await client
+                .GetProductsAsync(new GetProductsRequest()
+                {
+                    MaxResults = 100,
+                    Filters = new List<Amazon.Pricing.Model.Filter>
+                    {
+                        new Amazon.Pricing.Model.Filter()
+                        {
+                            Field = "instanceType",
+                            Type = FilterType.TERM_MATCH,
+                            Value = p4,
+                        },
+                        new Amazon.Pricing.Model.Filter()
+                        {
+                            Field = "regionCode",
+                            Type = FilterType.TERM_MATCH,
+                            Value = "us-east-1",
+                        },
+                    },
+                    FormatVersion = formatVersion,
+                    ServiceCode = serviceCode,
+                    // NextToken = "",
+                });
+            var priceLists = getProductsResponse.PriceList;
+            var getAttributeValuesResponse = await client.GetAttributeValuesAsync(new GetAttributeValuesRequest()
+            {
+               MaxResults = 1,
+               ServiceCode = serviceCode,
+               AttributeName = "operatingSystem"
+               //NextToken = ""
+            });
+            var listPriceListsResponse = await client.ListPriceListsAsync(new ListPriceListsRequest()
+            {
+                MaxResults = 100,
+                ServiceCode = serviceCode,
+                CurrencyCode = currencyCode,
+                EffectiveDate = DateTime.Parse("2023-07-01"),
+                RegionCode = regionCode,
+                // NextToken = "",
+            });
+            var getPriceListFileUrlResponse = await client.GetPriceListFileUrlAsync(new GetPriceListFileUrlRequest()
+            {
+                FileFormat = "csv",
+                PriceListArn = listPriceListsResponse.PriceLists.First().PriceListArn,
+            });
+        }
+        catch (Exception ex)
         {
-            FileFormat = "",
-            PriceListArn = "",
-        });
+            throw ex;
+        }
+
         throw new NotImplementedException();
     }
 }

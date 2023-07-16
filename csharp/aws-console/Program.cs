@@ -1,11 +1,8 @@
 ﻿// See https://aka.ms/new-console-template for more information
 
-using System.Text.Json.Nodes;
 using Amazon;
-using Amazon.EC2.Model;
 using Amazon.Runtime;
-using aws_console;
-using Dapper;
+using aws_restapi;
 using Microsoft.Extensions.Configuration;
 using Npgsql;
 using Serilog;
@@ -50,5 +47,6 @@ var awsMultiClient = new AwsMultiClient(
     new BasicAWSCredentials(
         config["aws:accessKey"],
         config["AWSSECRETKEY"]));
+await awsMultiClient.PricingApiDemo();
 
 Log.Information("fin");
