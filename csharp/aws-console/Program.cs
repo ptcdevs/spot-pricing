@@ -58,14 +58,13 @@ var awsMultiClient = new AwsMultiClient(
         config["AWSSECRETKEY"]));
 // await awsMultiClient.PricingApiDemo();
 
-
 await using var connection = new NpgsqlConnection(npgsqlConnectionStringBuilder.ToString());
 var onDemandPriceUrlsFetchedSql = File.ReadAllText("sql/onDemandPriceUrlsFetched.sql");
 var onDemandPriceUrlsFetched = await connection.QueryAsync<string>(onDemandPriceUrlsFetchedSql);
     
 var priceFileUrlResponses = await awsMultiClient.GetPriceFileDownloadUrlsAsync();
 var priceUrlsToFetch = priceFileUrlResponses
-    // .Where(resp => !onDemandPriceUrlsFetched.Contains(resp.Url))
+    .Where(resp => !onDemandPriceUrlsFetched.Contains(resp.Url))
     .ToList();
 var priceUrlsToFetchSubset = priceUrlsToFetch
     .Where(puf => puf.Url.Contains("20230713184719"))
@@ -76,7 +75,7 @@ var downloads = priceUrlsToFetchSubset
     .Select(async priceFileDownloadUrl => await awsMultiClient.DownloadPriceFileAsync(priceFileDownloadUrl, npgsqlConnectionStringBuilder))
     .ToList();
 
-//var downloadDetails = await Task.WhenAll(downloads);
-await Task.WhenAll(downloads);
+var downloadPriceFileResults = await Task.WhenAll(downloads);
 
+Log.Information(downloadPriceFileResults.ToString());
 Log.Information("fin");

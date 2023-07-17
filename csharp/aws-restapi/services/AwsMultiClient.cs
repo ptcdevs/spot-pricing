@@ -1,4 +1,5 @@
 using System.Data.Common;
+using System.Diagnostics;
 using System.Globalization;
 using Amazon;
 using Amazon.EC2;
@@ -315,113 +316,92 @@ public class AwsMultiClient
     }
 
     //public async Task<(int rowsInserted, string? csvHeader)> DownloadPriceFileAsync(
-    public async Task DownloadPriceFileAsync(
+    public async Task<DownloadPriceFileResult> DownloadPriceFileAsync(
         GetPriceListFileUrlResponse priceFileDownloadUrl,
         DbConnectionStringBuilder connectionStringBuilder,
         CancellationToken cancellationToken = default(CancellationToken))
     {
-        await using var connection = new NpgsqlConnection(connectionStringBuilder.ToString());
-        await connection.OpenAsync(cancellationToken);
-
-        //start download of file
-        var httpClient = new HttpClient();
-        var response = await httpClient.GetStreamAsync(priceFileDownloadUrl.Url, cancellationToken);
-        var tempFile = Path.GetTempFileName();
-        Log.Information($"tempFile: {tempFile}");
-        using var awsDownloadStreamReader = new StreamReader(response);
-
-        // write csv to file
-        await using (var outputFile = new StreamWriter(tempFile))
+        try
         {
-            while (await awsDownloadStreamReader.ReadLineAsync() is { } line)
+            var stopWatch = new Stopwatch();
+            stopWatch.Start();
+            
+            await using var connection = new NpgsqlConnection(connectionStringBuilder.ToString());
+            await connection.OpenAsync(cancellationToken);
+
+            //start download of file
+            var httpClient = new HttpClient();
+            var response = await httpClient.GetStreamAsync(priceFileDownloadUrl.Url, cancellationToken);
+            var tempFile = Path.GetTempFileName();
+            Log.Information($"tempFile: {tempFile}");
+            using var awsDownloadStreamReader = new StreamReader(response);
+
+            // write csv to temp file
+            await using (var outputFile = new StreamWriter(tempFile))
             {
-                await outputFile.WriteLineAsync(line);
+                while (await awsDownloadStreamReader.ReadLineAsync() is { } line)
+                {
+                    await outputFile.WriteLineAsync(line);
+                }
             }
+
+            // open file
+            var fileLines = new StreamReader(tempFile);
+
+            var boilerplate = Enumerable.Range(0, 5)
+                .Select(line => fileLines.ReadLine())
+                .ToList();
+            var csvHeader = fileLines.ReadLine();
+            var csvRecordsCreatedAt = DateTime.Now;
+            var onDemandCsvFile = new OnDemandCsvFile()
+            {
+                CreatedAt = csvRecordsCreatedAt,
+                Url = priceFileDownloadUrl.Url,
+                Header = csvHeader,
+            };
+            connection.SingleInsert(onDemandCsvFile);
+            var writer = await connection
+                .BeginBinaryImportAsync(
+                    @"COPY ""OnDemandCsvRows"" (""OnDemandCsvFilesId"", ""CreatedAt"", ""Row"") FROM STDIN (FORMAT BINARY) ",
+                    cancellationToken);
+            int i = 0;
+
+            for (; await fileLines.ReadLineAsync() is { } line; i++)
+            {
+                await writer.StartRowAsync(cancellationToken);
+                await writer.WriteAsync(onDemandCsvFile.Id, NpgsqlDbType.Bigint, cancellationToken);
+                await writer.WriteAsync(csvRecordsCreatedAt, NpgsqlDbType.Timestamp, cancellationToken);
+                await writer.WriteAsync(line, NpgsqlDbType.Text, cancellationToken);
+                if (i % 100000 == 0) Console.WriteLine($"{i} rows inserted");
+            }
+
+            await writer.CompleteAsync(cancellationToken);
+            Log.Information($"{i} rows bulk copied");
+            
+            stopWatch.Stop();
+            return new DownloadPriceFileResult()
+            {
+                OnDemandCsvFile = onDemandCsvFile,
+                RowsUploaded = i,
+                TimeElapsed = stopWatch.Elapsed
+            };
         }
-
-        // open file
-        var fileLines = new StreamReader(tempFile);
-
-        var boilerplate = Enumerable.Range(0, 5)
-            .Select(line => fileLines.ReadLine())
-            .ToList();
-        var csvHeader = fileLines.ReadLine();
-        var csvRecordsCreatedAt = DateTime.Now;
-        var onDemandCsvFile = new OnDemandCsvFile()
+        catch (Exception ex)
         {
-            CreatedAt = csvRecordsCreatedAt,
-            Url = priceFileDownloadUrl.Url,
-            Header = csvHeader,
-        };
-        connection.SingleInsert(onDemandCsvFile);
-        var writer = await connection
-            .BeginBinaryImportAsync(
-                @"COPY ""OnDemandCsvRows"" (""OnDemandCsvFilesId"", ""CreatedAt"", ""Row"") FROM STDIN (FORMAT BINARY) ",
-                cancellationToken);
-        int i = 0;
-        for (; await fileLines.ReadLineAsync() is { } line; i++)
-        {
-            await writer.StartRowAsync(cancellationToken);
-            await writer.WriteAsync(onDemandCsvFile.Id, NpgsqlDbType.Bigint, cancellationToken);
-            await writer.WriteAsync(csvRecordsCreatedAt, NpgsqlDbType.Timestamp, cancellationToken);
-            await writer.WriteAsync(line, NpgsqlDbType.Text, cancellationToken);
-            if (i % 100000 == 0) Console.WriteLine($"{i} rows inserted");
+            Log.Error(ex, "error downloading price file from {Url}", priceFileDownloadUrl.Url);
+            throw new NotImplementedException();
         }
+    }
+}
 
-        await writer.CompleteAsync(cancellationToken);
-        Console.WriteLine($"{i} rows bulk copied");
+public class DownloadPriceFileResult
+{
+    public OnDemandCsvFile OnDemandCsvFile { get; set; }
+    public int RowsUploaded { get; set; }
+    public TimeSpan TimeElapsed { get; set; }
 
-        // await transaction.CommitAsync(cancellationToken);
-        //     var leftovers = Enumerable.Range(0, int.MaxValue)
-        //         .AggregateUntilAsync(
-        //             seed: new
-        //             {
-        //                 nextLine = await streamRdr.ReadLineAsync(),
-        //                 uncommittedLines = (IEnumerable<string>)new List<string>() { },
-        //                 rowsInserted = 0,
-        //             },
-        //             // if there are 500 uncommitted lines, push to db and remove uncommitted lines from aggregate
-        //             // read new line into aggregate.nextLine
-        //             // append old aggregate.nextLine to uncommited lines
-        //             func: async (aggregateTask, i) =>
-        //             {
-        //                 var aggregate = await aggregateTask;
-        //                 var linesToUpload = aggregate.uncommittedLines.Count() >= 100
-        //                     ? aggregate.uncommittedLines
-        //                     : Array.Empty<string>();
-        //                 var rowsToUpload = linesToUpload
-        //                     .Select(line => new OnDemandCsvRow()
-        //                     {
-        //                         OnDemandCsvFilesId = onDemandCsvFileId,
-        //                         CreatedAt = csvRecordsCreatedAt,
-        //                         Row = line
-        //                     });
-        //                 var task = connection
-        //                     .BulkActionAsync(x => x.BulkInsert(rowsToUpload), cancellationToken);
-        //                 await task.WaitAsync(cancellationToken);
-        //                 Log.Debug($"{linesToUpload.Count()} rows bulk inserted");
-        //
-        //                 return new
-        //                 {
-        //                     nextLine = await streamRdr.ReadLineAsync(),
-        //                     uncommittedLines = aggregate.uncommittedLines
-        //                         .Except(linesToUpload)
-        //                         .Append(aggregate.nextLine),
-        //                 rowsInserted = aggregate.rowsInserted + rowsToUpload.Count(),
-        //                 };
-        //             },
-        //             untilFunc: aggregate => aggregate.nextLine == null);
-        //
-        //     //upload remaining rows
-        //     var rowsToUpload = (await leftovers).uncommittedLines
-        //         .Select(line => new OnDemandCsvRow()
-        //         {
-        //             OnDemandCsvFilesId = onDemandCsvFileId,
-        //             CreatedAt = csvRecordsCreatedAt,
-        //             Row = line
-        //         });
-        //     connection.BulkInsert(rowsToUpload);
-        //     
-        //     return ((await leftovers).rowsInserted, csvHeader);
+    public string ToString()
+    {
+        return $"{OnDemandCsvFile.Url} downloaded; {RowsUploaded} uploaded; completed in {TimeElapsed}";
     }
 }
