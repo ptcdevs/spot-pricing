@@ -3,6 +3,7 @@
 using Amazon;
 using Amazon.Runtime;
 using aws_restapi;
+using Dapper;
 using Microsoft.Extensions.Configuration;
 using Npgsql;
 using Serilog;
@@ -48,6 +49,12 @@ var awsMultiClient = new AwsMultiClient(
         config["aws:accessKey"],
         config["AWSSECRETKEY"]));
 // await awsMultiClient.PricingApiDemo();
+
+
+var connection = new NpgsqlConnection(npgsqlConnectionStringBuilder.ToString());
+var effectiveDatesFetchedSql = File.ReadAllText("sql/effectiveDatesFetched.sql");
+var effectiveDatesFetchedl = connection.Query(effectiveDatesFetchedSql)
+    .ToList();
 var priceFileDownloadUrls = await awsMultiClient.GetPriceFileDownloadUrlsAsync();
 var downloads = priceFileDownloadUrls
     .Select(async priceFileDownloadUrl => await awsMultiClient.DownloadPriceFileAsync(priceFileDownloadUrl.Url))

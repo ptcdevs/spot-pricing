@@ -313,16 +313,15 @@ public class AwsMultiClient
         var httpClient = new HttpClient();
         var response = await httpClient.GetStreamAsync(priceFileDownloadUrl);
         using var streamRdr = new StreamReader(response);
-        var line1 = await streamRdr.ReadLineAsync();
-        var line2 = await streamRdr.ReadLineAsync();
-        var line3 = await streamRdr.ReadLineAsync();
-        var line4 = await streamRdr.ReadLineAsync();
-        var line5 = await streamRdr.ReadLineAsync();
+        var boilerplate = Enumerable
+            .Range(0, 4)
+            .Select(async i => await streamRdr.ReadLineAsync());
         //line six is first column line
         // var line6 = await streamRdr.ReadLineAsync();
         using var csv = new CsvReader(streamRdr, CultureInfo.InvariantCulture);
         await csv.ReadAsync();
         csv.ReadHeader();
+        
         //TODO: probably skip csv processing at this point and just shove raw lines into db, to parse later
         while (csv.Read())
         {

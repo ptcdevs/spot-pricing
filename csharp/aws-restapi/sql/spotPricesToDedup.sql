@@ -1,6 +1,8 @@
 with idsNumbered as (select "Id",
                             row_number()
-                            over (partition by "Timestamp", "AvailabilityZone", "InstanceType", "ProductDescription", "Price" order by "Id") as rownum
+                            over (partition by
+                                "Timestamp", "AvailabilityZone", "InstanceType", "ProductDescription", "Price"
+                                order by "Id") as rownum
                      from "SpotPrices"),
      dupIds as (select "Id"
                 from idsNumbered
