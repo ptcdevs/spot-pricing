@@ -1,4 +1,3 @@
-using System.Data;
 using System.Data.Common;
 using System.Globalization;
 using Amazon;
@@ -7,11 +6,11 @@ using Amazon.EC2.Model;
 using Amazon.Pricing;
 using Amazon.Pricing.Model;
 using Amazon.Runtime;
+using Amazon.Runtime.Internal.Util;
 using aws_restapi.services;
-using CsvHelper;
-using Dapper;
 using Newtonsoft.Json.Linq;
 using Npgsql;
+using Serilog;
 using Z.Dapper.Plus;
 using Filter = Amazon.Pricing.Model.Filter;
 
@@ -313,16 +312,20 @@ public class AwsMultiClient
         throw new NotImplementedException();
     }
 
-    public async Task<object> DownloadPriceFileAsync(GetPriceListFileUrlResponse priceFileDownloadUrl,
-        DbConnection connection)
+    public async Task<(int rowsInserted, string? csvHeader)> DownloadPriceFileAsync(
+        GetPriceListFileUrlResponse priceFileDownloadUrl,
+        DbConnectionStringBuilder connectionStringBuilder,
+        CancellationToken cancellationToken = default(CancellationToken))
     {
+        
+        await using var connection = new NpgsqlConnection(connectionStringBuilder.ToString());
         var httpClient = new HttpClient();
         var response = await httpClient.GetStreamAsync(priceFileDownloadUrl.Url);
         using var streamRdr = new StreamReader(response);
         var boilerplate = Enumerable.Range(0, 5)
             .Select(i => streamRdr.ReadLine())
             .ToList();
-        var csvHeader = streamRdr.ReadLine();
+        var csvHeader = await streamRdr.ReadLineAsync();
         var csvRecordsCreatedAt = DateTime.Now;
         var onDemandCsvFile = new OnDemandCsvFile()
         {
@@ -338,14 +341,15 @@ public class AwsMultiClient
                 {
                     nextLine = await streamRdr.ReadLineAsync(),
                     uncommittedLines = (IEnumerable<string>)new List<string>() { },
+                    rowsInserted = 0,
                 },
-                // if there are 50 uncommitted lines, push to db and remove uncommitted lines from aggregate
+                // if there are 500 uncommitted lines, push to db and remove uncommitted lines from aggregate
                 // read new line into aggregate.nextLine
                 // append old aggregate.nextLine to uncommited lines
                 func: async (aggregateTask, i) =>
                 {
                     var aggregate = await aggregateTask;
-                    var linesToUpload = aggregate.uncommittedLines.Count() >= 1
+                    var linesToUpload = aggregate.uncommittedLines.Count() >= 100
                         ? aggregate.uncommittedLines
                         : Array.Empty<string>();
                     var rowsToUpload = linesToUpload
@@ -355,7 +359,10 @@ public class AwsMultiClient
                             CreatedAt = csvRecordsCreatedAt,
                             Row = line
                         });
-                    connection.BulkInsert(rowsToUpload);
+                    var task = connection
+                        .BulkActionAsync(x => x.BulkInsert(rowsToUpload), cancellationToken);
+                    await task.WaitAsync(cancellationToken);
+                    Log.Debug($"{linesToUpload.Count()} rows bulk inserted");
 
                     return new
                     {
@@ -363,6 +370,7 @@ public class AwsMultiClient
                         uncommittedLines = aggregate.uncommittedLines
                             .Except(linesToUpload)
                             .Append(aggregate.nextLine),
+                    rowsInserted = aggregate.rowsInserted + rowsToUpload.Count(),
                     };
                 },
                 untilFunc: aggregate => aggregate.nextLine == null);
@@ -376,7 +384,7 @@ public class AwsMultiClient
                 Row = line
             });
         connection.BulkInsert(rowsToUpload);
-
-        throw new NotImplementedException();
+        
+        return ((await leftovers).rowsInserted, csvHeader);
     }
 }

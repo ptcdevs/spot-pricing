@@ -71,8 +71,9 @@ var priceUrlsToFetchSubset = priceUrlsToFetch
     .Take(1)
     .ToList();
 var downloads = priceUrlsToFetchSubset
-    .Select(async priceFileDownloadUrl => await awsMultiClient.DownloadPriceFileAsync(priceFileDownloadUrl, connection))
+    .Select(async priceFileDownloadUrl => await awsMultiClient.DownloadPriceFileAsync(priceFileDownloadUrl, npgsqlConnectionStringBuilder))
     .ToList();
 
-await Task.WhenAll(downloads);
+var downloadDetails = await Task.WhenAll(downloads);
+
 Log.Information("fin");
