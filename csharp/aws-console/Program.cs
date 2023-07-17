@@ -68,12 +68,15 @@ var priceUrlsToFetch = priceFileUrlResponses
     .Where(resp => !onDemandPriceUrlsFetched.Contains(resp.Url))
     .ToList();
 var priceUrlsToFetchSubset = priceUrlsToFetch
+    .Where(puf => puf.Url.Contains("20230713184719"))
     .Take(1)
     .ToList();
+Log.Information($"url: {priceUrlsToFetchSubset.Single().Url}");
 var downloads = priceUrlsToFetchSubset
     .Select(async priceFileDownloadUrl => await awsMultiClient.DownloadPriceFileAsync(priceFileDownloadUrl, npgsqlConnectionStringBuilder))
     .ToList();
 
-var downloadDetails = await Task.WhenAll(downloads);
+//var downloadDetails = await Task.WhenAll(downloads);
+await Task.WhenAll(downloads);
 
 Log.Information("fin");

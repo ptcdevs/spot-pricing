@@ -312,79 +312,89 @@ public class AwsMultiClient
         throw new NotImplementedException();
     }
 
-    public async Task<(int rowsInserted, string? csvHeader)> DownloadPriceFileAsync(
+    //public async Task<(int rowsInserted, string? csvHeader)> DownloadPriceFileAsync(
+    public async Task DownloadPriceFileAsync(
         GetPriceListFileUrlResponse priceFileDownloadUrl,
         DbConnectionStringBuilder connectionStringBuilder,
         CancellationToken cancellationToken = default(CancellationToken))
     {
-        
         await using var connection = new NpgsqlConnection(connectionStringBuilder.ToString());
         var httpClient = new HttpClient();
         var response = await httpClient.GetStreamAsync(priceFileDownloadUrl.Url);
+        var tempFile = Path.GetTempFileName();
+        Log.Information($"tempFile: {tempFile}");
         using var streamRdr = new StreamReader(response);
-        var boilerplate = Enumerable.Range(0, 5)
-            .Select(i => streamRdr.ReadLine())
-            .ToList();
-        var csvHeader = await streamRdr.ReadLineAsync();
-        var csvRecordsCreatedAt = DateTime.Now;
-        var onDemandCsvFile = new OnDemandCsvFile()
+        using var outputFile = new StreamWriter(tempFile);
+
+        string s;
+        while ((s = await streamRdr.ReadLineAsync()) != null)
         {
-            CreatedAt = csvRecordsCreatedAt,
-            Url = priceFileDownloadUrl.Url,
-            Header = csvHeader,
-        };
-        connection.SingleInsert(onDemandCsvFile);
-        var onDemandCsvFileId = onDemandCsvFile.Id;
-        var leftovers = Enumerable.Range(0, int.MaxValue)
-            .AggregateUntilAsync(
-                seed: new
-                {
-                    nextLine = await streamRdr.ReadLineAsync(),
-                    uncommittedLines = (IEnumerable<string>)new List<string>() { },
-                    rowsInserted = 0,
-                },
-                // if there are 500 uncommitted lines, push to db and remove uncommitted lines from aggregate
-                // read new line into aggregate.nextLine
-                // append old aggregate.nextLine to uncommited lines
-                func: async (aggregateTask, i) =>
-                {
-                    var aggregate = await aggregateTask;
-                    var linesToUpload = aggregate.uncommittedLines.Count() >= 100
-                        ? aggregate.uncommittedLines
-                        : Array.Empty<string>();
-                    var rowsToUpload = linesToUpload
-                        .Select(line => new OnDemandCsvRow()
-                        {
-                            OnDemandCsvFilesId = onDemandCsvFileId,
-                            CreatedAt = csvRecordsCreatedAt,
-                            Row = line
-                        });
-                    var task = connection
-                        .BulkActionAsync(x => x.BulkInsert(rowsToUpload), cancellationToken);
-                    await task.WaitAsync(cancellationToken);
-                    Log.Debug($"{linesToUpload.Count()} rows bulk inserted");
+            await outputFile.WriteLineAsync(s);
+        }
 
-                    return new
-                    {
-                        nextLine = await streamRdr.ReadLineAsync(),
-                        uncommittedLines = aggregate.uncommittedLines
-                            .Except(linesToUpload)
-                            .Append(aggregate.nextLine),
-                    rowsInserted = aggregate.rowsInserted + rowsToUpload.Count(),
-                    };
-                },
-                untilFunc: aggregate => aggregate.nextLine == null);
-
-        //upload remaining rows
-        var rowsToUpload = (await leftovers).uncommittedLines
-            .Select(line => new OnDemandCsvRow()
-            {
-                OnDemandCsvFilesId = onDemandCsvFileId,
-                CreatedAt = csvRecordsCreatedAt,
-                Row = line
-            });
-        connection.BulkInsert(rowsToUpload);
-        
-        return ((await leftovers).rowsInserted, csvHeader);
+        //     var boilerplate = Enumerable.Range(0, 5)
+        //         .Select(i => streamRdr.ReadLine())
+        //         .ToList();
+        //     var csvHeader = await streamRdr.ReadLineAsync();
+        //     var csvRecordsCreatedAt = DateTime.Now;
+        //     var onDemandCsvFile = new OnDemandCsvFile()
+        //     {
+        //         CreatedAt = csvRecordsCreatedAt,
+        //         Url = priceFileDownloadUrl.Url,
+        //         Header = csvHeader,
+        //     };
+        //     connection.SingleInsert(onDemandCsvFile);
+        //     var onDemandCsvFileId = onDemandCsvFile.Id;
+        //     var leftovers = Enumerable.Range(0, int.MaxValue)
+        //         .AggregateUntilAsync(
+        //             seed: new
+        //             {
+        //                 nextLine = await streamRdr.ReadLineAsync(),
+        //                 uncommittedLines = (IEnumerable<string>)new List<string>() { },
+        //                 rowsInserted = 0,
+        //             },
+        //             // if there are 500 uncommitted lines, push to db and remove uncommitted lines from aggregate
+        //             // read new line into aggregate.nextLine
+        //             // append old aggregate.nextLine to uncommited lines
+        //             func: async (aggregateTask, i) =>
+        //             {
+        //                 var aggregate = await aggregateTask;
+        //                 var linesToUpload = aggregate.uncommittedLines.Count() >= 100
+        //                     ? aggregate.uncommittedLines
+        //                     : Array.Empty<string>();
+        //                 var rowsToUpload = linesToUpload
+        //                     .Select(line => new OnDemandCsvRow()
+        //                     {
+        //                         OnDemandCsvFilesId = onDemandCsvFileId,
+        //                         CreatedAt = csvRecordsCreatedAt,
+        //                         Row = line
+        //                     });
+        //                 var task = connection
+        //                     .BulkActionAsync(x => x.BulkInsert(rowsToUpload), cancellationToken);
+        //                 await task.WaitAsync(cancellationToken);
+        //                 Log.Debug($"{linesToUpload.Count()} rows bulk inserted");
+        //
+        //                 return new
+        //                 {
+        //                     nextLine = await streamRdr.ReadLineAsync(),
+        //                     uncommittedLines = aggregate.uncommittedLines
+        //                         .Except(linesToUpload)
+        //                         .Append(aggregate.nextLine),
+        //                 rowsInserted = aggregate.rowsInserted + rowsToUpload.Count(),
+        //                 };
+        //             },
+        //             untilFunc: aggregate => aggregate.nextLine == null);
+        //
+        //     //upload remaining rows
+        //     var rowsToUpload = (await leftovers).uncommittedLines
+        //         .Select(line => new OnDemandCsvRow()
+        //         {
+        //             OnDemandCsvFilesId = onDemandCsvFileId,
+        //             CreatedAt = csvRecordsCreatedAt,
+        //             Row = line
+        //         });
+        //     connection.BulkInsert(rowsToUpload);
+        //     
+        //     return ((await leftovers).rowsInserted, csvHeader);
     }
 }
