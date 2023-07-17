@@ -57,40 +57,18 @@ var awsMultiClient = new AwsMultiClient(
 
 
 await using var connection = new NpgsqlConnection(npgsqlConnectionStringBuilder.ToString());
-var effectiveDatesRegionsFetchedSql = File.ReadAllText("sql/effectiveDatesRegionsFetched.sql");
-var effectiveDatesRegionsFetched = await connection.QueryAsync(effectiveDatesRegionsFetchedSql);
+var onDemandPriceUrlsFetchedSql = File.ReadAllText("sql/onDemandPriceUrlsFetched.sql");
+var onDemandPriceUrlsFetched = await connection.QueryAsync<string>(onDemandPriceUrlsFetchedSql);
     
 var priceFileUrlResponses = await awsMultiClient.GetPriceFileDownloadUrlsAsync();
-var priceFileUrls = priceFileUrlResponses
-    .Select(response =>
-    {
-        var url = new Uri(response.Url);
-        var effectiveDateString = url.Segments[5].Substring(0, 14);
-        var effectiveDate = DateTime.ParseExact(effectiveDateString, "yyyyMMddHHmmss", CultureInfo.InvariantCulture);
-        var region = url.Segments[6].Substring(0, 9);
-        return new
-        {
-            priceFileDownloadUrlResponse = response,
-            region,
-            effectiveDate = effectiveDate,
-            effectiveDateString = effectiveDateString,
-        };
-    })
+var priceUrlsToFetch = priceFileUrlResponses
+    .Where(resp => !onDemandPriceUrlsFetched.Contains(resp.Url))
     .ToList();
-var priceListFilUrlsToFetch = priceFileUrls
-    .Where(pfu =>
-    {
-        return !effectiveDatesRegionsFetched
-            .Select(ed => Tuple.Create(ed.effectivedate, ed.region))
-            .Contains(Tuple.Create(pfu.effectiveDate, pfu.region));
-    })
-    .ToList();
-var priceListFilUrlsToFetchSubset = priceListFilUrlsToFetch
+var priceUrlsToFetchSubset = priceUrlsToFetch
     .Take(1)
     .ToList();
-connection.BulkInsert<SpotPrice>(Array.Empty<SpotPrice>());
-var downloads = priceFileUrlResponses
-    .Select(async priceFileDownloadUrl => await awsMultiClient.DownloadPriceFileAsync(priceFileDownloadUrl))
+var downloads = priceUrlsToFetchSubset
+    .Select(async priceFileDownloadUrl => await awsMultiClient.DownloadPriceFileAsync(priceFileDownloadUrl, connection))
     .ToList();
 
 await Task.WhenAll(downloads);

@@ -1,4 +1,5 @@
 using System.Data;
+using System.Data.Common;
 using System.Globalization;
 using Amazon;
 using Amazon.EC2;
@@ -8,7 +9,10 @@ using Amazon.Pricing.Model;
 using Amazon.Runtime;
 using aws_restapi.services;
 using CsvHelper;
+using Dapper;
 using Newtonsoft.Json.Linq;
+using Npgsql;
+using Z.Dapper.Plus;
 using Filter = Amazon.Pricing.Model.Filter;
 
 namespace aws_restapi;
@@ -309,45 +313,71 @@ public class AwsMultiClient
         throw new NotImplementedException();
     }
 
-    public async Task<object> DownloadPriceFileAsync(GetPriceListFileUrlResponse priceFileDownloadUrl)
+    public async Task<object> DownloadPriceFileAsync(GetPriceListFileUrlResponse priceFileDownloadUrl,
+        DbConnection connection)
     {
-        priceFileDownloadUrl.
         var httpClient = new HttpClient();
         var response = await httpClient.GetStreamAsync(priceFileDownloadUrl.Url);
         using var streamRdr = new StreamReader(response);
-        var boilerplate = Enumerable
-            .Range(0, 4)
-            .Select(async i => await streamRdr.ReadLineAsync());
-        var header = await streamRdr.ReadLineAsync();
+        var boilerplate = Enumerable.Range(0, 5)
+            .Select(i => streamRdr.ReadLine())
+            .ToList();
+        var csvHeader = streamRdr.ReadLine();
         var csvRecordsCreatedAt = DateTime.Now;
         var onDemandCsvFile = new OnDemandCsvFile()
         {
             CreatedAt = csvRecordsCreatedAt,
-            Filename = 
-            
-        }
+            Url = priceFileDownloadUrl.Url,
+            Header = csvHeader,
+        };
+        connection.SingleInsert(onDemandCsvFile);
+        var onDemandCsvFileId = connection
+            .QuerySingle<long>(@"select ""Id"" from ""OnDemandCsvFiles"" where ""Url"" = @Url",
+                new { onDemandCsvFile.Url });
         var leftovers = Enumerable.Range(0, int.MaxValue)
             .AggregateUntilAsync(
                 seed: new
                 {
-                    rowCount = 0,
-                    line = await streamRdr.ReadLineAsync(),
-                    unsavedLines = 0,
+                    nextLine = await streamRdr.ReadLineAsync(),
+                    uncommittedLines = (IEnumerable<string>)new List<string>() { },
                 },
-                func: async (aggregate, i) =>
+                // if there are 50 uncommitted lines, push to db and remove uncommitted lines from aggregate
+                // read new line into aggregate.nextLine
+                // append old aggregate.nextLine to uncommited lines
+                func: async (aggregateTask, i) =>
                 {
-                    var linesToUpload = (await aggregate).unsavedLines <= 50
-                        ? Array.Empty<O>()
-                        : false;
+                    var aggregate = await aggregateTask;
+                    var linesToUpload = aggregate.uncommittedLines.Count() < 50
+                        ? Array.Empty<string>()
+                        : aggregate.uncommittedLines;
+                    var rowsToUpload = linesToUpload
+                        .Select(line => new OnDemandCsvRow()
+                        {
+                            OnDemandCsvFilesId = onDemandCsvFileId,
+                            CreatedAt = csvRecordsCreatedAt,
+                            Row = line
+                        });
+                    connection.BulkInsert(rowsToUpload);
+
                     return new
                     {
-                        rowCount = (await aggregate).rowCount + 1, 
-                        line = await streamRdr.ReadLineAsync(), 
-                        unsavedLines = (await aggregate).unsavedLines + 1
+                        nextLine = await streamRdr.ReadLineAsync(),
+                        uncommittedLines = aggregate.uncommittedLines
+                            .Except(linesToUpload)
+                            .Append(aggregate.nextLine),
                     };
                 },
-                untilFunc: aggregate => aggregate.line == null);
+                untilFunc: aggregate => aggregate.nextLine == null);
         
+        //upload remaining rows
+        var rowsToUpload = (await leftovers).uncommittedLines
+            .Select(line => new OnDemandCsvRow()
+            {
+                OnDemandCsvFilesId = onDemandCsvFileId,
+                CreatedAt = csvRecordsCreatedAt,
+                Row = line
+            });
+        connection.BulkInsert(rowsToUpload);
 
         throw new NotImplementedException();
     }

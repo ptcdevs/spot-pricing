@@ -39,6 +39,9 @@
       <None Update="sql\effectiveDatesRegionsFetched.sql">
         <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       </None>
+      <None Update="sql\onDemandPriceUrlsFetched.sql">
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      </None>
     </ItemGroup>
 
     <ItemGroup>
