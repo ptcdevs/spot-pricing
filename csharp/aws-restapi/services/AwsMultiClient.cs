@@ -11,6 +11,7 @@ using aws_restapi.services;
 using Dapper;
 using Newtonsoft.Json.Linq;
 using Npgsql;
+using NpgsqlTypes;
 using Serilog;
 using Z.Dapper.Plus;
 using Filter = Amazon.Pricing.Model.Filter;
@@ -321,21 +322,30 @@ public class AwsMultiClient
     {
         await using var connection = new NpgsqlConnection(connectionStringBuilder.ToString());
         await connection.OpenAsync(cancellationToken);
+
+        //start download of file
         var httpClient = new HttpClient();
         var response = await httpClient.GetStreamAsync(priceFileDownloadUrl.Url, cancellationToken);
         var tempFile = Path.GetTempFileName();
         Log.Information($"tempFile: {tempFile}");
-        using var streamRdr = new StreamReader(response);
-        // using var outputFile = new StreamWriter(tempFile);
-        // while (await streamRdr.ReadLineAsync() is { } line)
-        // {
-        //     await outputFile.WriteLineAsync(line);
-        // }
+        using var awsDownloadStreamReader = new StreamReader(response);
+
+        // write csv to file
+        await using (var outputFile = new StreamWriter(tempFile))
+        {
+            while (await awsDownloadStreamReader.ReadLineAsync() is { } line)
+            {
+                await outputFile.WriteLineAsync(line);
+            }
+        }
+
+        // open file
+        var fileLines = new StreamReader(tempFile);
 
         var boilerplate = Enumerable.Range(0, 5)
-            .Select(i => streamRdr.ReadLine())
+            .Select(line => fileLines.ReadLine())
             .ToList();
-        var csvHeader = await streamRdr.ReadLineAsync();
+        var csvHeader = fileLines.ReadLine();
         var csvRecordsCreatedAt = DateTime.Now;
         var onDemandCsvFile = new OnDemandCsvFile()
         {
@@ -344,44 +354,24 @@ public class AwsMultiClient
             Header = csvHeader,
         };
         connection.SingleInsert(onDemandCsvFile);
-        var transaction = await connection.BeginTransactionAsync(cancellationToken);
-        var bufferSize = 100000;
-        var lines = new string[bufferSize + 1];
-        for (var i = 0; await streamRdr.ReadLineAsync() is { } line; i++)
+        var writer = await connection
+            .BeginBinaryImportAsync(
+                @"COPY ""OnDemandCsvRows"" (""OnDemandCsvFilesId"", ""CreatedAt"", ""Row"") FROM STDIN (FORMAT BINARY) ",
+                cancellationToken);
+        int i = 0;
+        for (; await fileLines.ReadLineAsync() is { } line; i++)
         {
-            lines[i] = line;
-            if (i == bufferSize)
-            {
-                // var insertSql = @"insert into ""OnDemandCsvRows""(""CreatedAt"", ""OnDemandCsvFilesId"", ""Row"")" +
-                //                 " values (@CreatedAt, @OnDemandCsvFilesId, @Row)";
-                // await connection
-                //     .ExecuteAsync(insertSql,
-                //         new
-                //         {
-                //             CreatedAt = csvRecordsCreatedAt,
-                //             OnDemandCsvFilesId = onDemandCsvFile.Id,
-                //             Row = line
-                //         },
-                //         transaction);
-                transaction.BulkInsert(lines.Select(l => new OnDemandCsvRow()
-                {
-                    CreatedAt = csvRecordsCreatedAt,
-                    OnDemandCsvFilesId = onDemandCsvFile.Id,
-                    Row = l,
-                }));
-                Console.WriteLine($"{bufferSize} lines inserted");
-                i = 0;
-            }
+            await writer.StartRowAsync(cancellationToken);
+            await writer.WriteAsync(onDemandCsvFile.Id, NpgsqlDbType.Bigint, cancellationToken);
+            await writer.WriteAsync(csvRecordsCreatedAt, NpgsqlDbType.Timestamp, cancellationToken);
+            await writer.WriteAsync(line, NpgsqlDbType.Text, cancellationToken);
+            if (i % 100000 == 0) Console.WriteLine($"{i} rows inserted");
         }
-        transaction.BulkInsert(lines.Select(l => new OnDemandCsvRow()
-        {
-            CreatedAt = csvRecordsCreatedAt,
-            OnDemandCsvFilesId = onDemandCsvFile.Id,
-            Row = l,
-        }));
-        Console.WriteLine($"{lines.Count()} lines inserted");
 
-        await transaction.CommitAsync(cancellationToken);
+        await writer.CompleteAsync(cancellationToken);
+        Console.WriteLine($"{i} rows bulk copied");
+
+        // await transaction.CommitAsync(cancellationToken);
         //     var leftovers = Enumerable.Range(0, int.MaxValue)
         //         .AggregateUntilAsync(
         //             seed: new
