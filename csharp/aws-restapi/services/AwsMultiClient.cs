@@ -8,6 +8,7 @@ using Amazon.Pricing.Model;
 using Amazon.Runtime;
 using Amazon.Runtime.Internal.Util;
 using aws_restapi.services;
+using Dapper;
 using Newtonsoft.Json.Linq;
 using Npgsql;
 using Serilog;
@@ -319,32 +320,52 @@ public class AwsMultiClient
         CancellationToken cancellationToken = default(CancellationToken))
     {
         await using var connection = new NpgsqlConnection(connectionStringBuilder.ToString());
+        await connection.OpenAsync(cancellationToken);
         var httpClient = new HttpClient();
-        var response = await httpClient.GetStreamAsync(priceFileDownloadUrl.Url);
+        var response = await httpClient.GetStreamAsync(priceFileDownloadUrl.Url, cancellationToken);
         var tempFile = Path.GetTempFileName();
         Log.Information($"tempFile: {tempFile}");
         using var streamRdr = new StreamReader(response);
-        using var outputFile = new StreamWriter(tempFile);
 
-        string s;
-        while ((s = await streamRdr.ReadLineAsync()) != null)
+        // using var outputFile = new StreamWriter(tempFile);
+        // while ((s = await streamRdr.ReadLineAsync()) != null)
+        // {
+        //     await outputFile.WriteLineAsync(s);
+        // }
+
+        var boilerplate = Enumerable.Range(0, 5)
+            .Select(i => streamRdr.ReadLine())
+            .ToList();
+        var csvHeader = await streamRdr.ReadLineAsync();
+        var csvRecordsCreatedAt = DateTime.Now;
+        var onDemandCsvFile = new OnDemandCsvFile()
         {
-            await outputFile.WriteLineAsync(s);
+            CreatedAt = csvRecordsCreatedAt,
+            Url = priceFileDownloadUrl.Url,
+            Header = csvHeader,
+        };
+        connection.SingleInsert(onDemandCsvFile);
+        var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        for (int i = 0; await streamRdr.ReadLineAsync() is { } line; i++)
+        {
+            var insertSql = @"insert into ""OnDemandCsvRows""(""CreatedAt"", ""OnDemandCsvFilesId"", ""Row"")" +
+                      " values (@CreatedAt, @OnDemandCsvFilesId, @Row)";
+            await connection
+                .ExecuteAsync(insertSql,
+                    new
+                    {
+                        CreatedAt = csvRecordsCreatedAt,
+                        OnDemandCsvFilesId = onDemandCsvFile.Id,
+                        Row = line
+                    },
+                    transaction);
+            if (i % 10000 == 0)
+            {
+                Log.Information("10000 lines executed");
+            }
         }
 
-        //     var boilerplate = Enumerable.Range(0, 5)
-        //         .Select(i => streamRdr.ReadLine())
-        //         .ToList();
-        //     var csvHeader = await streamRdr.ReadLineAsync();
-        //     var csvRecordsCreatedAt = DateTime.Now;
-        //     var onDemandCsvFile = new OnDemandCsvFile()
-        //     {
-        //         CreatedAt = csvRecordsCreatedAt,
-        //         Url = priceFileDownloadUrl.Url,
-        //         Header = csvHeader,
-        //     };
-        //     connection.SingleInsert(onDemandCsvFile);
-        //     var onDemandCsvFileId = onDemandCsvFile.Id;
+        await transaction.CommitAsync(cancellationToken);
         //     var leftovers = Enumerable.Range(0, int.MaxValue)
         //         .AggregateUntilAsync(
         //             seed: new
