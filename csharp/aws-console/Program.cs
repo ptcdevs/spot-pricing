@@ -1,5 +1,7 @@
 ﻿// See https://aka.ms/new-console-template for more information
 
+using System.Globalization;
+using System.Text.RegularExpressions;
 using Amazon;
 using Amazon.Runtime;
 using aws_restapi;
@@ -36,6 +38,9 @@ DapperPlusManager.Entity<SpotPrice>()
 DapperPlusManager.Entity<QueryRun>()
     .Table("QueriesRun")
     .Identity(x => x.Id);
+DapperPlusManager.Entity<OnDemandCsvFile>()
+    .Table("OnDemandCsvFiles")
+    .Identity(x => x.Id);
 
 var awsMultiClient = new AwsMultiClient(
     new[]
@@ -51,13 +56,41 @@ var awsMultiClient = new AwsMultiClient(
 // await awsMultiClient.PricingApiDemo();
 
 
-var connection = new NpgsqlConnection(npgsqlConnectionStringBuilder.ToString());
-var effectiveDatesFetchedSql = File.ReadAllText("sql/effectiveDatesFetched.sql");
-var effectiveDatesFetchedl = connection.Query(effectiveDatesFetchedSql)
+await using var connection = new NpgsqlConnection(npgsqlConnectionStringBuilder.ToString());
+var effectiveDatesRegionsFetchedSql = File.ReadAllText("sql/effectiveDatesRegionsFetched.sql");
+var effectiveDatesRegionsFetched = await connection.QueryAsync(effectiveDatesRegionsFetchedSql);
+    
+var priceFileUrlResponses = await awsMultiClient.GetPriceFileDownloadUrlsAsync();
+var priceFileUrls = priceFileUrlResponses
+    .Select(response =>
+    {
+        var url = new Uri(response.Url);
+        var effectiveDateString = url.Segments[5].Substring(0, 14);
+        var effectiveDate = DateTime.ParseExact(effectiveDateString, "yyyyMMddHHmmss", CultureInfo.InvariantCulture);
+        var region = url.Segments[6].Substring(0, 9);
+        return new
+        {
+            priceFileDownloadUrlResponse = response,
+            region,
+            effectiveDate = effectiveDate,
+            effectiveDateString = effectiveDateString,
+        };
+    })
     .ToList();
-var priceFileDownloadUrls = await awsMultiClient.GetPriceFileDownloadUrlsAsync();
-var downloads = priceFileDownloadUrls
-    .Select(async priceFileDownloadUrl => await awsMultiClient.DownloadPriceFileAsync(priceFileDownloadUrl.Url))
+var priceListFilUrlsToFetch = priceFileUrls
+    .Where(pfu =>
+    {
+        return !effectiveDatesRegionsFetched
+            .Select(ed => Tuple.Create(ed.effectivedate, ed.region))
+            .Contains(Tuple.Create(pfu.effectiveDate, pfu.region));
+    })
+    .ToList();
+var priceListFilUrlsToFetchSubset = priceListFilUrlsToFetch
+    .Take(1)
+    .ToList();
+connection.BulkInsert<SpotPrice>(Array.Empty<SpotPrice>());
+var downloads = priceFileUrlResponses
+    .Select(async priceFileDownloadUrl => await awsMultiClient.DownloadPriceFileAsync(priceFileDownloadUrl))
     .ToList();
 
 await Task.WhenAll(downloads);

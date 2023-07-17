@@ -1,3 +1,4 @@
+using System.Data;
 using System.Globalization;
 using Amazon;
 using Amazon.EC2;
@@ -308,26 +309,45 @@ public class AwsMultiClient
         throw new NotImplementedException();
     }
 
-    public async Task<object> DownloadPriceFileAsync(string priceFileDownloadUrl)
+    public async Task<object> DownloadPriceFileAsync(GetPriceListFileUrlResponse priceFileDownloadUrl)
     {
+        priceFileDownloadUrl.
         var httpClient = new HttpClient();
-        var response = await httpClient.GetStreamAsync(priceFileDownloadUrl);
+        var response = await httpClient.GetStreamAsync(priceFileDownloadUrl.Url);
         using var streamRdr = new StreamReader(response);
         var boilerplate = Enumerable
             .Range(0, 4)
             .Select(async i => await streamRdr.ReadLineAsync());
-        //line six is first column line
-        // var line6 = await streamRdr.ReadLineAsync();
-        using var csv = new CsvReader(streamRdr, CultureInfo.InvariantCulture);
-        await csv.ReadAsync();
-        csv.ReadHeader();
-        
-        //TODO: probably skip csv processing at this point and just shove raw lines into db, to parse later
-        while (csv.Read())
+        var header = await streamRdr.ReadLineAsync();
+        var csvRecordsCreatedAt = DateTime.Now;
+        var onDemandCsvFile = new OnDemandCsvFile()
         {
-            var record = csv.GetRecord<dynamic>();
-            // Do something with the record.
+            CreatedAt = csvRecordsCreatedAt,
+            Filename = 
+            
         }
+        var leftovers = Enumerable.Range(0, int.MaxValue)
+            .AggregateUntilAsync(
+                seed: new
+                {
+                    rowCount = 0,
+                    line = await streamRdr.ReadLineAsync(),
+                    unsavedLines = 0,
+                },
+                func: async (aggregate, i) =>
+                {
+                    var linesToUpload = (await aggregate).unsavedLines <= 50
+                        ? Array.Empty<O>()
+                        : false;
+                    return new
+                    {
+                        rowCount = (await aggregate).rowCount + 1, 
+                        line = await streamRdr.ReadLineAsync(), 
+                        unsavedLines = (await aggregate).unsavedLines + 1
+                    };
+                },
+                untilFunc: aggregate => aggregate.line == null);
+        
 
         throw new NotImplementedException();
     }
