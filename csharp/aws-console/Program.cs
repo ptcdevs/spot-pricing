@@ -41,6 +41,9 @@ DapperPlusManager.Entity<QueryRun>()
 DapperPlusManager.Entity<OnDemandCsvFile>()
     .Table("OnDemandCsvFiles")
     .Identity(x => x.Id);
+DapperPlusManager.Entity<OnDemandCsvRow>()
+    .Table("OnDemandCsvRows")
+    .Identity(x => x.Id);
 
 var awsMultiClient = new AwsMultiClient(
     new[]

@@ -331,9 +331,7 @@ public class AwsMultiClient
             Header = csvHeader,
         };
         connection.SingleInsert(onDemandCsvFile);
-        var onDemandCsvFileId = connection
-            .QuerySingle<long>(@"select ""Id"" from ""OnDemandCsvFiles"" where ""Url"" = @Url",
-                new { onDemandCsvFile.Url });
+        var onDemandCsvFileId = onDemandCsvFile.Id;
         var leftovers = Enumerable.Range(0, int.MaxValue)
             .AggregateUntilAsync(
                 seed: new
@@ -347,9 +345,9 @@ public class AwsMultiClient
                 func: async (aggregateTask, i) =>
                 {
                     var aggregate = await aggregateTask;
-                    var linesToUpload = aggregate.uncommittedLines.Count() < 50
-                        ? Array.Empty<string>()
-                        : aggregate.uncommittedLines;
+                    var linesToUpload = aggregate.uncommittedLines.Count() >= 1
+                        ? aggregate.uncommittedLines
+                        : Array.Empty<string>();
                     var rowsToUpload = linesToUpload
                         .Select(line => new OnDemandCsvRow()
                         {
@@ -368,7 +366,7 @@ public class AwsMultiClient
                     };
                 },
                 untilFunc: aggregate => aggregate.nextLine == null);
-        
+
         //upload remaining rows
         var rowsToUpload = (await leftovers).uncommittedLines
             .Select(line => new OnDemandCsvRow()
