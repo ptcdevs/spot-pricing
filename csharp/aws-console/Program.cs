@@ -65,7 +65,7 @@ var onDemandPriceUrlsFetched = await connection.QueryAsync<string>(onDemandPrice
     
 var priceFileUrlResponses = await awsMultiClient.GetPriceFileDownloadUrlsAsync();
 var priceUrlsToFetch = priceFileUrlResponses
-    .Where(resp => !onDemandPriceUrlsFetched.Contains(resp.Url))
+    // .Where(resp => !onDemandPriceUrlsFetched.Contains(resp.Url))
     .ToList();
 var priceUrlsToFetchSubset = priceUrlsToFetch
     .Where(puf => puf.Url.Contains("20230713184719"))

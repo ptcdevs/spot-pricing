@@ -326,11 +326,10 @@ public class AwsMultiClient
         var tempFile = Path.GetTempFileName();
         Log.Information($"tempFile: {tempFile}");
         using var streamRdr = new StreamReader(response);
-
         // using var outputFile = new StreamWriter(tempFile);
-        // while ((s = await streamRdr.ReadLineAsync()) != null)
+        // while (await streamRdr.ReadLineAsync() is { } line)
         // {
-        //     await outputFile.WriteLineAsync(s);
+        //     await outputFile.WriteLineAsync(line);
         // }
 
         var boilerplate = Enumerable.Range(0, 5)
@@ -346,24 +345,41 @@ public class AwsMultiClient
         };
         connection.SingleInsert(onDemandCsvFile);
         var transaction = await connection.BeginTransactionAsync(cancellationToken);
-        for (int i = 0; await streamRdr.ReadLineAsync() is { } line; i++)
+        var bufferSize = 100000;
+        var lines = new string[bufferSize + 1];
+        for (var i = 0; await streamRdr.ReadLineAsync() is { } line; i++)
         {
-            var insertSql = @"insert into ""OnDemandCsvRows""(""CreatedAt"", ""OnDemandCsvFilesId"", ""Row"")" +
-                      " values (@CreatedAt, @OnDemandCsvFilesId, @Row)";
-            await connection
-                .ExecuteAsync(insertSql,
-                    new
-                    {
-                        CreatedAt = csvRecordsCreatedAt,
-                        OnDemandCsvFilesId = onDemandCsvFile.Id,
-                        Row = line
-                    },
-                    transaction);
-            if (i % 10000 == 0)
+            lines[i] = line;
+            if (i == bufferSize)
             {
-                Log.Information("10000 lines executed");
+                // var insertSql = @"insert into ""OnDemandCsvRows""(""CreatedAt"", ""OnDemandCsvFilesId"", ""Row"")" +
+                //                 " values (@CreatedAt, @OnDemandCsvFilesId, @Row)";
+                // await connection
+                //     .ExecuteAsync(insertSql,
+                //         new
+                //         {
+                //             CreatedAt = csvRecordsCreatedAt,
+                //             OnDemandCsvFilesId = onDemandCsvFile.Id,
+                //             Row = line
+                //         },
+                //         transaction);
+                transaction.BulkInsert(lines.Select(l => new OnDemandCsvRow()
+                {
+                    CreatedAt = csvRecordsCreatedAt,
+                    OnDemandCsvFilesId = onDemandCsvFile.Id,
+                    Row = l,
+                }));
+                Console.WriteLine($"{bufferSize} lines inserted");
+                i = 0;
             }
         }
+        transaction.BulkInsert(lines.Select(l => new OnDemandCsvRow()
+        {
+            CreatedAt = csvRecordsCreatedAt,
+            OnDemandCsvFilesId = onDemandCsvFile.Id,
+            Row = l,
+        }));
+        Console.WriteLine($"{lines.Count()} lines inserted");
 
         await transaction.CommitAsync(cancellationToken);
         //     var leftovers = Enumerable.Range(0, int.MaxValue)
