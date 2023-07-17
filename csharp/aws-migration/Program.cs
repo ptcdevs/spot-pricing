@@ -36,6 +36,7 @@ var runner = serviceProvider.GetRequiredService<IMigrationRunner>();
 
 // Execute the migrations
 runner.MigrateUp();
+// runner.MigrateDown();
 //TODO: add support for down migration
 
 Console.WriteLine("fin");

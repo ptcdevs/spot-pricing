@@ -10,7 +10,8 @@ public class AddOnDemandPricingTables : Migration {
             .WithColumn("Id").AsInt64().PrimaryKey().Identity()
             .WithColumn("CreatedAt").AsDateTime2().NotNullable()
             .WithColumn("Filename").AsString().NotNullable()
-            .WithColumn("Header").AsString().NotNullable().WithColumnDescription("Header line of csv file");
+            .WithColumn("Header").AsString().NotNullable().WithColumnDescription("Header line of csv file")
+            .WithColumn("EffectiveDate").AsString().NotNullable().WithColumnDescription("Date prices go effective on AWS");
         Create.Table("OnDemandCsvRows").WithDescription("raw imported csv rows")
             .WithColumn("Id").AsInt64().PrimaryKey().Identity()
             .WithColumn("OnDemandCsvFilesId").AsInt64().ForeignKey("OnDemandCsvFiles", "Id")
@@ -20,7 +21,7 @@ public class AddOnDemandPricingTables : Migration {
 
     public override void Down()
     {
-        Delete.Table("OnDemandCsvFiles");
         Delete.Table("OnDemandCsvRows");
+        Delete.Table("OnDemandCsvFiles");
     }
 }
