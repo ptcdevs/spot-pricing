@@ -60,23 +60,16 @@ var awsMultiClient = new AwsMultiClient(
 
 await using var connection = new NpgsqlConnection(npgsqlConnectionStringBuilder.ToString());
 var headers = await connection
-    .QueryAsync<string>(@"select ""Header"" from ""OnDemandCsvFiles""");
-var columns = headers
-    .Select(header => header.Split(","))
-    .ToList();
-var commonColumns = columns
-    .Skip(1)
-    .Aggregate(
-        (IEnumerable<string>)columns.First(),
-        (aggregate, columns) =>
-        {
-            return aggregate.Intersect(columns);
-        });
-var uncommonColumns = columns
-    .SelectMany(c => c)
-    .Distinct()
-    .Except(commonColumns)
-    .ToList();
-Log.Information("common columns: {Join}", string.Join(",", commonColumns));
-Log.Information("uncommon columns: {Join}", string.Join(",", uncommonColumns));
+    .QueryAsync<OnDemandCsvFile>(@"select * from ""OnDemandCsvFiles""");
+var header = headers.First();
+var rows = connection.Query<OnDemandCsvRow>(
+    @"select * from ""OnDemandCsvRows"" where ""OnDemandCsvFilesId"" = @id",
+    new { id = header.Id },
+    buffered: false);
+foreach (var row in rows)
+{
+    var onDemandPricing = new On
+}
+// Log.Information("common columns: {Join}", string.Join(",", commonColumns));
+// Log.Information("uncommon columns: {Join}", string.Join(",", uncommonColumns));
 Log.Information("fin");
