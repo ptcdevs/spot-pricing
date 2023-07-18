@@ -344,6 +344,7 @@ public class AwsMultiClient
                     await outputFile.WriteLineAsync(line);
                 }
             }
+            awsDownloadStreamReader.Close();
 
             // open file
             var fileLines = new StreamReader(tempFile);
@@ -376,6 +377,10 @@ public class AwsMultiClient
             }
 
             await writer.CompleteAsync(cancellationToken);
+            await connection.CloseAsync();
+            fileLines.Close();
+            File.Delete(tempFile);
+            
             Log.Information($"{i} rows bulk copied");
             
             stopWatch.Stop();

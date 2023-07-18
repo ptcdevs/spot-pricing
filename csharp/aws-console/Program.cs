@@ -66,16 +66,24 @@ var priceFileUrlResponses = await awsMultiClient.GetPriceFileDownloadUrlsAsync()
 var priceUrlsToFetch = priceFileUrlResponses
     .Where(resp => !onDemandPriceUrlsFetched.Contains(resp.Url))
     .ToList();
-var priceUrlsToFetchSubset = priceUrlsToFetch
-    .Where(puf => puf.Url.Contains("20230713184719"))
-    .Take(1)
-    .ToList();
-Log.Information($"url: {priceUrlsToFetchSubset.Single().Url}");
-var downloads = priceUrlsToFetchSubset
-    .Select(async priceFileDownloadUrl => await awsMultiClient.DownloadPriceFileAsync(priceFileDownloadUrl, npgsqlConnectionStringBuilder))
+var semaphore = new SemaphoreSlim(1);
+var downloads = priceUrlsToFetch
+    .Select(async priceFileDownloadUrl =>
+    {
+        try
+        {
+            semaphore.Wait();
+            Log.Information($"url: {priceFileDownloadUrl.Url}");
+            return await awsMultiClient.DownloadPriceFileAsync(priceFileDownloadUrl, npgsqlConnectionStringBuilder);
+        }
+        finally
+        {
+            semaphore.Release();
+        }
+    })
     .ToList();
 
 var downloadPriceFileResults = await Task.WhenAll(downloads);
 
-Log.Information(downloadPriceFileResults.ToString());
+Log.Information(string.Join("\n", downloadPriceFileResults.Select(result => result.ToString())));
 Log.Information("fin");
