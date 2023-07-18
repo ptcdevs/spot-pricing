@@ -92,6 +92,12 @@ DapperPlusManager.Entity<SpotPrice>()
 DapperPlusManager.Entity<QueryRun>()
     .Table("QueriesRun")
     .Identity(x => x.Id);
+DapperPlusManager.Entity<OnDemandCsvFile>()
+    .Table("OnDemandCsvFiles")
+    .Identity(x => x.Id);
+DapperPlusManager.Entity<OnDemandCsvRow>()
+    .Table("OnDemandCsvRows")
+    .Identity(x => x.Id);
 
 //aws config
 builder.Services.AddScoped<AwsMultiClient>(provider =>
@@ -159,7 +165,8 @@ app.MapGet("syncgpuspotpricing", async (NpgsqlConnection connection, AwsMultiCli
                                 EndTimeUtc = endtime,
                                 Filters = new List<Filter>
                                 {
-                                    new("availability-zone", new List<string> { "us-east-1a", "us-east-2a", "us-west-1a", "us-west-2a" }),
+                                    new("availability-zone",
+                                        new List<string> { "us-east-1a", "us-east-2a", "us-west-1a", "us-west-2a" }),
                                     new("instance-type", instanceTypes.ToList()),
                                 },
                             }
@@ -198,7 +205,7 @@ app.MapGet("syncgpuspotpricing", async (NpgsqlConnection connection, AwsMultiCli
         // var spotPricesToDedup = await connection.ExecuteAsync(spotPricesToDedupSql);
         var dedupResult = connection.Execute(dedupSql);
         stopWatch.Stop();
-        
+
         return Results.Json(new
         {
             success = true,
@@ -211,7 +218,40 @@ app.MapGet("syncgpuspotpricing", async (NpgsqlConnection connection, AwsMultiCli
     .RequireAuthorization("ValidGithubUser");
 app.MapGet("syncgpuondemandpricing", async (NpgsqlConnection connection, AwsMultiClient awsMultiClient) =>
     {
-        var pricingClient = new AmazonPricingClient();
+        var onDemandPriceUrlsFetchedSql = File.ReadAllText("sql/onDemandPriceUrlsFetched.sql");
+        var onDemandPriceUrlsFetched = await connection.QueryAsync<string>(onDemandPriceUrlsFetchedSql);
+
+        var priceFileUrlResponses = await awsMultiClient.GetPriceFileDownloadUrlsAsync();
+        var priceUrlsToFetch = priceFileUrlResponses
+            .Where(resp => !onDemandPriceUrlsFetched.Contains(resp.Url))
+            .ToList();
+        var semaphore = new SemaphoreSlim(1);
+        var downloads = priceUrlsToFetch
+            .Select(async priceFileDownloadUrl =>
+            {
+                try
+                {
+                    semaphore.Wait();
+                    Log.Information($"url: {priceFileDownloadUrl.Url}");
+                    return await awsMultiClient.DownloadPriceFileAsync(priceFileDownloadUrl,
+                        npgsqlConnectionStringBuilder);
+                }
+                finally
+                {
+                    semaphore.Release();
+                }
+            })
+            .ToList();
+
+        var downloadPriceFileResults = await Task.WhenAll(downloads);
+
+        Log.Information(string.Join("\n", downloadPriceFileResults.Select(result => result.ToString())));
+        Log.Information("fin");
+        return new
+        {
+            priceUrlsToFetch, 
+            downloadPriceFileResults
+        };
     })
     .RequireAuthorization("ValidGithubUser");
 
