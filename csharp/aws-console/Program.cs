@@ -59,31 +59,24 @@ var awsMultiClient = new AwsMultiClient(
 // await awsMultiClient.PricingApiDemo();
 
 await using var connection = new NpgsqlConnection(npgsqlConnectionStringBuilder.ToString());
-var onDemandPriceUrlsFetchedSql = File.ReadAllText("sql/onDemandPriceUrlsFetched.sql");
-var onDemandPriceUrlsFetched = await connection.QueryAsync<string>(onDemandPriceUrlsFetchedSql);
-    
-var priceFileUrlResponses = await awsMultiClient.GetPriceFileDownloadUrlsAsync();
-var priceUrlsToFetch = priceFileUrlResponses
-    .Where(resp => !onDemandPriceUrlsFetched.Contains(resp.Url))
+var headers = await connection
+    .QueryAsync<string>(@"select ""Header"" from ""OnDemandCsvFiles""");
+var columns = headers
+    .Select(header => header.Split(","))
     .ToList();
-var semaphore = new SemaphoreSlim(1);
-var downloads = priceUrlsToFetch
-    .Select(async priceFileDownloadUrl =>
-    {
-        try
+var commonColumns = columns
+    .Skip(1)
+    .Aggregate(
+        (IEnumerable<string>)columns.First(),
+        (aggregate, columns) =>
         {
-            semaphore.Wait();
-            Log.Information($"url: {priceFileDownloadUrl.Url}");
-            return await awsMultiClient.DownloadPriceFileAsync(priceFileDownloadUrl, npgsqlConnectionStringBuilder);
-        }
-        finally
-        {
-            semaphore.Release();
-        }
-    })
+            return aggregate.Intersect(columns);
+        });
+var uncommonColumns = columns
+    .SelectMany(c => c)
+    .Distinct()
+    .Except(commonColumns)
     .ToList();
-
-var downloadPriceFileResults = await Task.WhenAll(downloads);
-
-Log.Information(string.Join("\n", downloadPriceFileResults.Select(result => result.ToString())));
+Log.Information("common columns: {Join}", string.Join(",", commonColumns));
+Log.Information("uncommon columns: {Join}", string.Join(",", uncommonColumns));
 Log.Information("fin");
