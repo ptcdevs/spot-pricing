@@ -4,8 +4,11 @@ using System.Globalization;
 using System.Text.RegularExpressions;
 using Amazon;
 using Amazon.Runtime;
+using aws_console;
 using aws_restapi;
+using CsvHelper;
 using Dapper;
+using Microsoft.AspNetCore.Mvc.Infrastructure;
 using Microsoft.Extensions.Configuration;
 using Npgsql;
 using Serilog;
@@ -56,20 +59,19 @@ var awsMultiClient = new AwsMultiClient(
     new BasicAWSCredentials(
         config["aws:accessKey"],
         config["AWSSECRETKEY"]));
-// await awsMultiClient.PricingApiDemo();
 
 await using var connection = new NpgsqlConnection(npgsqlConnectionStringBuilder.ToString());
-var headers = await connection
-    .QueryAsync<OnDemandCsvFile>(@"select * from ""OnDemandCsvFiles""");
-var header = headers.First();
-var rows = connection.Query<OnDemandCsvRow>(
-    @"select * from ""OnDemandCsvRows"" where ""OnDemandCsvFilesId"" = @id",
-    new { id = header.Id },
-    buffered: false);
-foreach (var row in rows)
+connection.Open();
+var createCsvFileTempTableSql = File.ReadAllText("sql/createCsvFileTempTable.sql");
+var result = connection.Execute(createCsvFileTempTableSql);
+var export = connection
+    .BeginTextExport("copy csvFile (line) TO STDOUT (FORMAT TEXT)");
+using (var csv = new CsvReader(export, CultureInfo.InvariantCulture))
 {
-    var onDemandPricing = new On
+    while (true)
+    {
+        var record = csv.GetRecord<dynamic>();
+        break;
+    }
 }
-// Log.Information("common columns: {Join}", string.Join(",", commonColumns));
-// Log.Information("uncommon columns: {Join}", string.Join(",", uncommonColumns));
 Log.Information("fin");
