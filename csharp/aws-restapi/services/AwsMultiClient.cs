@@ -9,6 +9,7 @@ using Amazon.Pricing.Model;
 using Amazon.Runtime;
 using Amazon.Runtime.Internal.Util;
 using aws_restapi.services;
+using CsvHelper;
 using Dapper;
 using Newtonsoft.Json.Linq;
 using Npgsql;
@@ -325,7 +326,7 @@ public class AwsMultiClient
         {
             var stopWatch = new Stopwatch();
             stopWatch.Start();
-            
+
             await using var connection = new NpgsqlConnection(connectionStringBuilder.ToString());
             await connection.OpenAsync(cancellationToken);
 
@@ -344,6 +345,7 @@ public class AwsMultiClient
                     await outputFile.WriteLineAsync(line);
                 }
             }
+
             awsDownloadStreamReader.Close();
 
             // open file
@@ -380,9 +382,9 @@ public class AwsMultiClient
             await connection.CloseAsync();
             fileLines.Close();
             File.Delete(tempFile);
-            
+
             Log.Information($"{i} rows bulk copied");
-            
+
             stopWatch.Stop();
             return new DownloadPriceFileResult()
             {
@@ -397,6 +399,101 @@ public class AwsMultiClient
             throw new NotImplementedException();
         }
     }
+
+    public async Task<ParseOnDemandPricingResult> ParseOnDemandPricingAsync(long csvFileId, NpgsqlConnectionStringBuilder connectionStringBuilder)
+    {
+        var stopWatch = new Stopwatch(); 
+        stopWatch.Start();
+        await using var readConnection = new NpgsqlConnection(connectionStringBuilder.ToString());
+        await using var writeConnection = new NpgsqlConnection(connectionStringBuilder.ToString());
+        await readConnection.OpenAsync();
+        await writeConnection.OpenAsync();
+        var createCsvFileTempTableSql = await File.ReadAllTextAsync("sql/createCsvFileTempTable.sql");
+        var csvFileTempTableCreationResult = await readConnection
+            .ExecuteAsync(createCsvFileTempTableSql, new { Id = csvFileId });
+        var pgCsvTextReader = await readConnection
+            .BeginTextExportAsync("copy csvFile (line) TO STDOUT (FORMAT TEXT)");
+        var createdAt = DateTimeOffset.Now;
+        var bulkCopySql = await File.ReadAllTextAsync("sql/onDemandPricingBulkCopy.sql");
+        var pgPricingBulkCopier = await writeConnection.BeginBinaryImportAsync(bulkCopySql);
+        int recordsCopied = 0;
+        using var csv = new CsvReader(pgCsvTextReader, CultureInfo.InvariantCulture);
+        var records = csv.GetRecords<dynamic>();
+        foreach (var record in records)
+        {
+            if (recordsCopied % 1000 == 0) Log.Information("{recordsCopied} records copied", recordsCopied);
+            //convert to poco
+            var recordDictionary = ((IEnumerable<KeyValuePair<string, object>>)record)
+                .ToDictionary(kv => kv.Key, kv => kv.Value);
+            var onDemandPrice = OnDemandPrice.Convert(recordDictionary);
+            await OnDemandPrice.BulkCopy(pgPricingBulkCopier, createdAt, onDemandPrice);
+            recordsCopied += 1;
+            //write to bulk copier
+            // await pgPricingBulkCopier.StartRowAsync();
+            // await pgPricingBulkCopier.WriteAsync(createdAt.ToUniversalTime(), NpgsqlDbType.TimestampTz);
+            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.SKU, NpgsqlDbType.Text);
+            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.OnDemandCsvFilesId, NpgsqlDbType.Bigint);
+            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.OnDemandCsvRowsId, NpgsqlDbType.Bigint);
+            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.OfferTermCode, NpgsqlDbType.Text);
+            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.RateCode, NpgsqlDbType.Text);
+            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.TermType, NpgsqlDbType.Text);
+            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.PriceDescription, NpgsqlDbType.Text);
+            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.EffectiveDate, NpgsqlDbType.Date);
+            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.StartingRange, NpgsqlDbType.Text);
+            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.EndingRange, NpgsqlDbType.Text);
+            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.Unit, NpgsqlDbType.Text);
+            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.PricePerUnit, NpgsqlDbType.Money);
+            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.Currency, NpgsqlDbType.Text);
+            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.RelatedTo, NpgsqlDbType.Text);
+            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.LeaseContractLength, NpgsqlDbType.Text);
+            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.PurchaseOption, NpgsqlDbType.Text);
+            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.OfferingClass, NpgsqlDbType.Text);
+            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.ProductFamily, NpgsqlDbType.Text);
+            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.serviceCode, NpgsqlDbType.Text);
+            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.Location, NpgsqlDbType.Text);
+            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.LocationType, NpgsqlDbType.Text);
+            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.InstanceType, NpgsqlDbType.Text);
+            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.CurrentGeneration, NpgsqlDbType.Text);
+            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.InstanceFamily, NpgsqlDbType.Text);
+            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.vCPU, NpgsqlDbType.Text);
+            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.PhysicalProcessor, NpgsqlDbType.Text);
+            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.ClockSpeed, NpgsqlDbType.Text);
+            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.Memory, NpgsqlDbType.Text);
+            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.Storage, NpgsqlDbType.Text);
+            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.NetworkPerformance, NpgsqlDbType.Text);
+            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.ProcessorArchitecture, NpgsqlDbType.Text);
+            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.Tenancy, NpgsqlDbType.Text);
+            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.OperatingSystem, NpgsqlDbType.Text);
+            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.LicenseModel, NpgsqlDbType.Text);
+            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.GPU, NpgsqlDbType.Text);
+            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.GpuMemory, NpgsqlDbType.Text);
+            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.instanceSKU, NpgsqlDbType.Text);
+            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.MarketOption, NpgsqlDbType.Text);
+            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.NormalizationSizeFactor, NpgsqlDbType.Text);
+            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.PhysicalCores, NpgsqlDbType.Text);
+            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.ProcessorFeatures, NpgsqlDbType.Text);
+            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.RegionCode, NpgsqlDbType.Text);
+            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.serviceName, NpgsqlDbType.Text);
+        }
+
+        await pgPricingBulkCopier.CompleteAsync();
+
+        await readConnection.CloseAsync();
+        await writeConnection.CloseAsync();
+        
+        stopWatch.Stop();
+        return new ParseOnDemandPricingResult()
+        {
+            RecordsCopied = recordsCopied,
+            TimeElapsed = stopWatch.Elapsed
+        };
+    }
+}
+
+public class ParseOnDemandPricingResult
+{
+    public long RecordsCopied { get; init; }
+    public TimeSpan TimeElapsed { get; init; }
 }
 
 public class DownloadPriceFileResult
