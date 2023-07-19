@@ -1,16 +1,10 @@
-with csvUnion as (select 0             as priority,
-                         ODCF."Header" as line
-                  from "OnDemandCsvFiles" ODCF
-                  where "Id" = 48
-                  union
-                  select 1          as priority,
-                         ODCR."Row" as line
-                  from "OnDemandCsvRows" ODCR
-                  where "OnDemandCsvFilesId" = 48
-                  limit 100)
+select ODCF."Header" as line
+into temporary table csvFile
+from "OnDemandCsvFiles" ODCF
+where "Id" = @Id;
 
-select line
-into temporary table csvFile 
-from csvUnion
-order by priority
-limit 1000;
+insert into csvFile
+select ODCR."Row" as line
+from "OnDemandCsvRows" ODCR
+where "OnDemandCsvFilesId" = @Id
+limit 100;

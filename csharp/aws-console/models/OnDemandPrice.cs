@@ -6,7 +6,7 @@ public class OnDemandPrice
     [Name("Id")] public string Id;
     [Name("CreatedAt")] public DateTime CreatedAt;
     [Name("SKU")] public string SKU;
-    [Name("OnDemandCsvRowsId")] public string OnDemandCsvRowsId;
+    [Name("OnDemandCsvRowsId")] public long OnDemandCsvRowsId;
     [Name("OfferTermCode")] public string OfferTermCode;
     [Name("RateCode")] public string RateCode;
     [Name("TermType")] public string TermType;
@@ -15,7 +15,7 @@ public class OnDemandPrice
     [Name("StartingRange")] public string StartingRange;
     [Name("EndingRange")] public string EndingRange;
     [Name("Unit")] public string Unit;
-    [Name("PricePerUnit")] public string PricePerUnit;
+    [Name("PricePerUnit")] public decimal PricePerUnit;
     [Name("Currency")] public string Currency;
     [Name("RelatedTo")] public string RelatedTo;
     [Name("LeaseContractLength")] public string LeaseContractLength;
@@ -47,4 +47,55 @@ public class OnDemandPrice
     [Name("Processor Features")] public string ProcessorFeatures;
     [Name("Region Code")] public string RegionCode;
     [Name("serviceName")] public string serviceName;
+
+    public static OnDemandPrice Convert(long csvFileId, DateTime createdAt, Dictionary<string, object> recordDictionary)
+    {
+        var onDemandPrice = new OnDemandPrice()
+        {
+            SKU = recordDictionary["SKU"].ToString(),
+            CreatedAt = createdAt,
+            OnDemandCsvRowsId = csvFileId,
+            OfferTermCode = recordDictionary["OfferTermCode"].ToString(),
+            RateCode = recordDictionary["RateCode"].ToString(),
+            TermType = recordDictionary["TermType"].ToString(),
+            PriceDescription = recordDictionary["PriceDescription"].ToString(),
+            EffectiveDate = recordDictionary["EffectiveDate"].ToString(),
+            StartingRange = recordDictionary["StartingRange"].ToString(),
+            EndingRange = recordDictionary["EndingRange"].ToString(),
+            Unit = recordDictionary["Unit"].ToString(),
+            PricePerUnit = decimal.Parse(recordDictionary["PricePerUnit"].ToString()),
+            Currency = recordDictionary["Currency"].ToString(),
+            RelatedTo = recordDictionary["RelatedTo"].ToString(),
+            LeaseContractLength = recordDictionary["LeaseContractLength"].ToString(),
+            PurchaseOption = recordDictionary["PurchaseOption"].ToString(),
+            OfferingClass = recordDictionary["OfferingClass"].ToString(),
+            ProductFamily = recordDictionary["Product Family"].ToString(),
+            serviceCode = recordDictionary["serviceCode"].ToString(),
+            Location = recordDictionary["Location"].ToString(),
+            LocationType = recordDictionary["Location Type"].ToString(),
+            InstanceType = recordDictionary["Instance Type"].ToString(),
+            CurrentGeneration = recordDictionary["Current Generation"].ToString(),
+            InstanceFamily = recordDictionary["Instance Family"].ToString(),
+            vCPU = recordDictionary["vCPU"].ToString(),
+            PhysicalProcessor = recordDictionary["Physical Processor"].ToString(),
+            ClockSpeed = recordDictionary["Clock Speed"].ToString(),
+            Memory = recordDictionary["Memory"].ToString(),
+            Storage = recordDictionary["Storage"].ToString(),
+            NetworkPerformance = recordDictionary["Network Performance"].ToString(),
+            ProcessorArchitecture = recordDictionary["Processor Architecture"].ToString(),
+            Tenancy = recordDictionary["Tenancy"].ToString(),
+            OperatingSystem = recordDictionary["Operating System"].ToString(),
+            LicenseModel = recordDictionary["License Model"].ToString(),
+            GPU = recordDictionary["GPU"].ToString(),
+            GpuMemory = recordDictionary["GPU Memory"].ToString(),
+            instanceSKU = recordDictionary["instanceSKU"].ToString(),
+            MarketOption = recordDictionary["MarketOption"].ToString(),
+            NormalizationSizeFactor = recordDictionary["Normalization Size Factor"].ToString(),
+            PhysicalCores = recordDictionary["Physical Cores"].ToString(),
+            ProcessorFeatures = recordDictionary["Processor Features"].ToString(),
+            RegionCode = recordDictionary["Region Code"].ToString(),
+            serviceName = recordDictionary["serviceName"].ToString(),
+        };
+        return onDemandPrice;
+    }
 }
