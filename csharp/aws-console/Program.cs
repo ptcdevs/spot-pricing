@@ -45,8 +45,29 @@ var awsMultiClient = new AwsMultiClient(
         config["aws:accessKey"],
         config["AWSSECRETKEY"]));
 
-var csvFileId = 73;
-var result = await awsMultiClient.ParseOnDemandPricingAsync(csvFileId, npgsqlConnectionStringBuilder);
+var connection = new NpgsqlConnection(npgsqlConnectionStringBuilder.ToString());
+var unparsedCsvFileIdsSql = await File.ReadAllTextAsync("sql/unparsedCsvFileIds.sql");
+var csvFileIds = connection.Query<long>(unparsedCsvFileIdsSql);
+var semaphore = new SemaphoreSlim(1);
+var resultTasks = csvFileIds
+    .Select(async csvFileId =>
+    {
+        try
+        {
+            semaphore.Wait();
+            return await awsMultiClient.ParseOnDemandPricingAsync(csvFileId, npgsqlConnectionStringBuilder);
+        }
+        catch (Exception ex)
+        {
+            throw ex;
+        }
+        finally
+        {
+            semaphore.Release();
+        }
+    });
+
+var results = await Task.WhenAll(resultTasks);
 Log.Information("fin");
 // await using var readConnection = new NpgsqlConnection(npgsqlConnectionStringBuilder.ToString());
 // await using var writeConnection = new NpgsqlConnection(npgsqlConnectionStringBuilder.ToString());

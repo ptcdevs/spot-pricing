@@ -484,6 +484,7 @@ public class AwsMultiClient
         stopWatch.Stop();
         return new ParseOnDemandPricingResult()
         {
+            OnDemandCsvFileId = csvFileId,
             RecordsCopied = recordsCopied,
             TimeElapsed = stopWatch.Elapsed
         };
@@ -492,6 +493,7 @@ public class AwsMultiClient
 
 public class ParseOnDemandPricingResult
 {
+    public long OnDemandCsvFileId { get; set; }
     public long RecordsCopied { get; init; }
     public TimeSpan TimeElapsed { get; init; }
 }

@@ -74,18 +74,22 @@ builder.Services.AddSwaggerGen(options =>
 });
 
 // database config
-var npgsqlConnectionStringBuilder = new NpgsqlConnectionStringBuilder()
-{
-    Host = config["postgres:host"],
-    Port = int.Parse(config["postgres:port"] ?? string.Empty),
-    Database = config["postgres:database"],
-    Username = config["postgres:username"],
-    Password = config["POSTGRESQL_PASSWORD"],
-    SslMode = SslMode.VerifyCA,
-    RootCertificate = "sql/ptcdevs-psql-ca-certificate.crt",
-};
-builder.Services.AddScoped<NpgsqlConnection>(provider =>
-    new NpgsqlConnection(npgsqlConnectionStringBuilder.ToString()));
+builder.Services
+    .AddScoped<NpgsqlConnectionStringBuilder>(provider => new NpgsqlConnectionStringBuilder()
+    {
+        Host = config["postgres:host"],
+        Port = int.Parse(config["postgres:port"] ?? string.Empty),
+        Database = config["postgres:database"],
+        Username = config["postgres:username"],
+        Password = config["POSTGRESQL_PASSWORD"],
+        SslMode = SslMode.VerifyCA,
+        RootCertificate = "sql/ptcdevs-psql-ca-certificate.crt",
+    })
+    .AddScoped<NpgsqlConnection>(provider =>
+    {
+        var npgsqlConnectionStringBuilder = provider.GetService<NpgsqlConnectionStringBuilder>();
+        return new NpgsqlConnection(npgsqlConnectionStringBuilder.ToString());
+    });
 DapperPlusManager.Entity<SpotPrice>()
     .Table("SpotPrices")
     .Identity(x => x.Id);
@@ -216,7 +220,10 @@ app.MapGet("syncgpuspotpricing", async (NpgsqlConnection connection, AwsMultiCli
         });
     })
     .RequireAuthorization("ValidGithubUser");
-app.MapGet("syncgpuondemandpricing", async (NpgsqlConnection connection, AwsMultiClient awsMultiClient) =>
+app.MapGet("syncondemandpricing", async (
+        NpgsqlConnectionStringBuilder connectionStringBuilder,
+        NpgsqlConnection connection, 
+        AwsMultiClient awsMultiClient) =>
     {
         var onDemandPriceUrlsFetchedSql = File.ReadAllText("sql/onDemandPriceUrlsFetched.sql");
         var onDemandPriceUrlsFetched = await connection.QueryAsync<string>(onDemandPriceUrlsFetchedSql);
@@ -233,8 +240,7 @@ app.MapGet("syncgpuondemandpricing", async (NpgsqlConnection connection, AwsMult
                 {
                     semaphore.Wait();
                     Log.Information($"url: {priceFileDownloadUrl.Url}");
-                    return await awsMultiClient.DownloadPriceFileAsync(priceFileDownloadUrl,
-                        npgsqlConnectionStringBuilder);
+                    return await awsMultiClient.DownloadPriceFileAsync(priceFileDownloadUrl, connectionStringBuilder);
                 }
                 finally
                 {
@@ -249,10 +255,43 @@ app.MapGet("syncgpuondemandpricing", async (NpgsqlConnection connection, AwsMult
         Log.Information("fin");
         return new
         {
-            priceUrlsToFetch, 
+            priceUrlsToFetch,
             downloadPriceFileResults
         };
     })
     .RequireAuthorization("ValidGithubUser");
+
+app.MapGet("parseondemandpricing", async (
+    NpgsqlConnection connection,
+    NpgsqlConnectionStringBuilder connectionStringBuilder,
+    AwsMultiClient awsMultiClient) =>
+{
+    var unparsedCsvFileIdsSql = await File.ReadAllTextAsync("sql/unparsedCsvFileIds.sql");
+    var csvFileIds = connection.Query<long>(unparsedCsvFileIdsSql);
+    var semaphore = new SemaphoreSlim(1);
+    var resultTasks = csvFileIds
+        .Select(async csvFileId =>
+        {
+            try
+            {
+                semaphore.Wait();
+                return await awsMultiClient.ParseOnDemandPricingAsync(csvFileId, connectionStringBuilder);
+            }
+            catch (Exception ex)
+            {
+                throw ex;
+            }
+            finally
+            {
+                semaphore.Release();
+            }
+        });
+
+    var results = await Task.WhenAll(resultTasks);
+    return new
+    {
+        results
+    };
+}).RequireAuthorization("ValidGithubUser");
 
 app.Run();

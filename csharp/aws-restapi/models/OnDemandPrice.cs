@@ -59,16 +59,16 @@ public class OnDemandPrice
             SKU = recordDictionary["SKU"].ToString(),
             OnDemandCsvFilesId = long.Parse(recordDictionary["OnDemandCsvFilesId"].ToString()),
             OnDemandCsvRowsId = long.Parse(recordDictionary["OnDemandCsvRowsId"].ToString()),
+            EffectiveDate = DateTime.ParseExact(recordDictionary["EffectiveDate"].ToString(), "yyyy-MM-dd",
+                CultureInfo.InvariantCulture),
+            PricePerUnit = decimal.Parse(recordDictionary["PricePerUnit"].ToString()),
             OfferTermCode = recordDictionary["OfferTermCode"].ToString(),
             RateCode = recordDictionary["RateCode"].ToString(),
             TermType = recordDictionary["TermType"].ToString(),
             PriceDescription = recordDictionary["PriceDescription"].ToString(),
-            EffectiveDate = DateTime.ParseExact(recordDictionary["EffectiveDate"].ToString(), "yyyy-MM-dd",
-                CultureInfo.InvariantCulture),
             StartingRange = recordDictionary["StartingRange"].ToString(),
             EndingRange = recordDictionary["EndingRange"].ToString(),
             Unit = recordDictionary["Unit"].ToString(),
-            PricePerUnit = decimal.Parse(recordDictionary["PricePerUnit"].ToString()),
             Currency = recordDictionary["Currency"].ToString(),
             RelatedTo = recordDictionary["RelatedTo"].ToString(),
             LeaseContractLength = recordDictionary["LeaseContractLength"].ToString(),
@@ -101,6 +101,45 @@ public class OnDemandPrice
             RegionCode = recordDictionary["Region Code"].ToString(),
             serviceName = recordDictionary["serviceName"].ToString(),
         };
+
+        onDemandPrice.OfferTermCode = onDemandPrice.OfferTermCode.Equals("") ? null : onDemandPrice.OfferTermCode;
+        onDemandPrice.RateCode = onDemandPrice.RateCode.Equals("") ? null : onDemandPrice.RateCode;
+        onDemandPrice.TermType = onDemandPrice.TermType.Equals("") ? null : onDemandPrice.TermType;
+        onDemandPrice.PriceDescription = onDemandPrice.PriceDescription.Equals("") ? null : onDemandPrice.PriceDescription;
+        onDemandPrice.StartingRange = onDemandPrice.StartingRange.Equals("") ? null : onDemandPrice.StartingRange;
+        onDemandPrice.EndingRange = onDemandPrice.EndingRange.Equals("") ? null : onDemandPrice.EndingRange;
+        onDemandPrice.Unit = onDemandPrice.Unit.Equals("") ? null : onDemandPrice.Unit;
+        onDemandPrice.Currency = onDemandPrice.Currency.Equals("") ? null : onDemandPrice.Currency;
+        onDemandPrice.RelatedTo = onDemandPrice.RelatedTo.Equals("") ? null : onDemandPrice.RelatedTo;
+        onDemandPrice.LeaseContractLength = onDemandPrice.LeaseContractLength.Equals("") ? null : onDemandPrice.LeaseContractLength;
+        onDemandPrice.PurchaseOption = onDemandPrice.PurchaseOption.Equals("") ? null : onDemandPrice.PurchaseOption;
+        onDemandPrice.OfferingClass = onDemandPrice.OfferingClass.Equals("") ? null : onDemandPrice.OfferingClass;
+        onDemandPrice.ProductFamily = onDemandPrice.ProductFamily.Equals("") ? null : onDemandPrice.ProductFamily;
+        onDemandPrice.serviceCode = onDemandPrice.serviceCode.Equals("") ? null : onDemandPrice.serviceCode;
+        onDemandPrice.Location = onDemandPrice.Location.Equals("") ? null : onDemandPrice.Location;
+        onDemandPrice.LocationType = onDemandPrice.LocationType.Equals("") ? null : onDemandPrice.LocationType;
+        onDemandPrice.InstanceType = onDemandPrice.InstanceType.Equals("") ? null : onDemandPrice.InstanceType;
+        onDemandPrice.CurrentGeneration = onDemandPrice.CurrentGeneration.Equals("") ? null : onDemandPrice.CurrentGeneration;
+        onDemandPrice.InstanceFamily = onDemandPrice.InstanceFamily.Equals("") ? null : onDemandPrice.InstanceFamily;
+        onDemandPrice.vCPU = onDemandPrice.vCPU.Equals("") ? null : onDemandPrice.vCPU;
+        onDemandPrice.PhysicalProcessor = onDemandPrice.PhysicalProcessor.Equals("") ? null : onDemandPrice.PhysicalProcessor;
+        onDemandPrice.ClockSpeed = onDemandPrice.ClockSpeed.Equals("") ? null : onDemandPrice.ClockSpeed;
+        onDemandPrice.Memory = onDemandPrice.Memory.Equals("") ? null : onDemandPrice.Memory;
+        onDemandPrice.Storage = onDemandPrice.Storage.Equals("") ? null : onDemandPrice.Storage;
+        onDemandPrice.NetworkPerformance = onDemandPrice.NetworkPerformance.Equals("") ? null : onDemandPrice.NetworkPerformance;
+        onDemandPrice.ProcessorArchitecture = onDemandPrice.ProcessorArchitecture.Equals("") ? null : onDemandPrice.ProcessorArchitecture;
+        onDemandPrice.Tenancy = onDemandPrice.Tenancy.Equals("") ? null : onDemandPrice.Tenancy;
+        onDemandPrice.OperatingSystem = onDemandPrice.OperatingSystem.Equals("") ? null : onDemandPrice.OperatingSystem;
+        onDemandPrice.LicenseModel = onDemandPrice.LicenseModel.Equals("") ? null : onDemandPrice.LicenseModel;
+        onDemandPrice.GPU = onDemandPrice.GPU.Equals("") ? null : onDemandPrice.GPU;
+        onDemandPrice.GpuMemory = onDemandPrice.GpuMemory.Equals("") ? null : onDemandPrice.GpuMemory;
+        onDemandPrice.instanceSKU = onDemandPrice.instanceSKU.Equals("") ? null : onDemandPrice.instanceSKU;
+        onDemandPrice.MarketOption = onDemandPrice.MarketOption.Equals("") ? null : onDemandPrice.MarketOption;
+        onDemandPrice.NormalizationSizeFactor = onDemandPrice.NormalizationSizeFactor.Equals("") ? null : onDemandPrice.NormalizationSizeFactor;
+        onDemandPrice.PhysicalCores = onDemandPrice.PhysicalCores.Equals("") ? null : onDemandPrice.PhysicalCores;
+        onDemandPrice.ProcessorFeatures = onDemandPrice.ProcessorFeatures.Equals("") ? null : onDemandPrice.ProcessorFeatures;
+        onDemandPrice.RegionCode = onDemandPrice.RegionCode.Equals("") ? null : onDemandPrice.RegionCode;
+        onDemandPrice.serviceName = onDemandPrice.serviceName.Equals("") ? null : onDemandPrice.serviceName;
         return onDemandPrice;
     }
 

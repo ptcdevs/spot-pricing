@@ -62,5 +62,8 @@
         <None Update="sql\onDemandPricingBulkCopy.sql">
           <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </None>
+        <None Update="sql\unparsedCsvFileIds.sql">
+          <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
     </ItemGroup>
 </Project>
