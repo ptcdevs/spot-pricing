@@ -32,3 +32,6 @@ pricing-describe-services:
 #pricing-get-:
 #	aws pricing describe-services --region us-east-1 --service-code AmazonEC2 --format-version aws_v1 --max-items 1
 #	
+
+docker-compose-up:
+	docker-compose up 

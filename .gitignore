@@ -40,3 +40,4 @@ Desktop.ini
 /csharp/aws-migration/Properties/launchSettings.json
 /data/
 /csharp/aws-restapi/Properties/launchSettings.json
+/config/*/*-secret.env
