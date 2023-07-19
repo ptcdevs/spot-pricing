@@ -72,8 +72,10 @@ var pgPricingBulkCopier = writeConnection.BeginBinaryImport(bulkCopySql);
 using (var csv = new CsvReader(pgCsvTextReader, CultureInfo.InvariantCulture))
 {
     var records = csv.GetRecords<dynamic>();
+    int i = 0;
     foreach (var record in records)
     {
+        if(i++ % 1000 == 0) Console.WriteLine($"{i} records copied");
         //convert to poco
         var recordDictionary = ((IEnumerable<KeyValuePair<string, object>>)record)
             .ToDictionary(kv => kv.Key, kv => kv.Value);
