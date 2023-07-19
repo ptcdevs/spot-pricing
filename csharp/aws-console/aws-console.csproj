@@ -48,6 +48,9 @@
       <None Update="sql\createCsvFileTempTable.sql">
         <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       </None>
+      <None Update="sql\onDemandPricingBulkCopy.sql">
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      </None>
     </ItemGroup>
 
     <ItemGroup>

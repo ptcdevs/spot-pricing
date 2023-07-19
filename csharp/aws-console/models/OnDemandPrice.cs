@@ -1,17 +1,19 @@
 using System.ComponentModel;
+using System.Globalization;
 using CsvHelper.Configuration.Attributes;
 
 public class OnDemandPrice
 {
-    [Name("Id")] public string Id;
-    [Name("CreatedAt")] public DateTime CreatedAt;
+    [Name("")] public string Id;
+    [Name("CreatedAt")] public DateTimeOffset CreatedAt;
     [Name("SKU")] public string SKU;
+    [Name("OnDemandCsvRowsId")] public long OnDemandCsvFilesId;
     [Name("OnDemandCsvRowsId")] public long OnDemandCsvRowsId;
     [Name("OfferTermCode")] public string OfferTermCode;
     [Name("RateCode")] public string RateCode;
     [Name("TermType")] public string TermType;
     [Name("PriceDescription")] public string PriceDescription;
-    [Name("EffectiveDate")] public string EffectiveDate;
+    [Name("EffectiveDate")] public DateTime EffectiveDate;
     [Name("StartingRange")] public string StartingRange;
     [Name("EndingRange")] public string EndingRange;
     [Name("Unit")] public string Unit;
@@ -54,12 +56,13 @@ public class OnDemandPrice
         {
             SKU = recordDictionary["SKU"].ToString(),
             CreatedAt = createdAt,
-            OnDemandCsvRowsId = csvFileId,
+            OnDemandCsvFilesId = long.Parse(recordDictionary["OnDemandCsvFilesId"].ToString()),
+            OnDemandCsvRowsId = long.Parse(recordDictionary["OnDemandCsvRowsId"].ToString()),
             OfferTermCode = recordDictionary["OfferTermCode"].ToString(),
             RateCode = recordDictionary["RateCode"].ToString(),
             TermType = recordDictionary["TermType"].ToString(),
             PriceDescription = recordDictionary["PriceDescription"].ToString(),
-            EffectiveDate = recordDictionary["EffectiveDate"].ToString(),
+            EffectiveDate = DateTime.ParseExact(recordDictionary["EffectiveDate"].ToString(), "yyyy-MM-dd", CultureInfo.InvariantCulture),
             StartingRange = recordDictionary["StartingRange"].ToString(),
             EndingRange = recordDictionary["EndingRange"].ToString(),
             Unit = recordDictionary["Unit"].ToString(),

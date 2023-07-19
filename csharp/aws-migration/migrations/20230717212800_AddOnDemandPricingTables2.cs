@@ -11,6 +11,7 @@ public class AddOnDemandPricingTables2 : Migration {
             .WithColumn("Id").AsInt64().PrimaryKey().Identity()
             .WithColumn("CreatedAt").AsCustom("timestamptz").NotNullable()
             .WithColumn("SKU").AsString().Nullable()
+            .WithColumn("OnDemandCsvFilesId").AsInt64().ForeignKey("OnDemandCsvFiles", "Id")
             .WithColumn("OnDemandCsvRowsId").AsInt64().ForeignKey("OnDemandCsvRows", "Id")
             .WithColumn("OfferTermCode").AsString().Nullable()
             .WithColumn("RateCode").AsString().Nullable()

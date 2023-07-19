@@ -8,6 +8,7 @@ using CsvHelper;
 using Dapper;
 using Microsoft.Extensions.Configuration;
 using Npgsql;
+using NpgsqlTypes;
 using Serilog;
 using Z.Dapper.Plus;
 
@@ -56,14 +57,18 @@ var awsMultiClient = new AwsMultiClient(
         config["aws:accessKey"],
         config["AWSSECRETKEY"]));
 
-await using var connection = new NpgsqlConnection(npgsqlConnectionStringBuilder.ToString());
-connection.Open();
+await using var readConnection = new NpgsqlConnection(npgsqlConnectionStringBuilder.ToString());
+await using var writeConnection = new NpgsqlConnection(npgsqlConnectionStringBuilder.ToString());
+readConnection.Open();
+writeConnection.Open();
 var createCsvFileTempTableSql = File.ReadAllText("sql/createCsvFileTempTable.sql");
 var csvFileId = 73;
-var result = connection.Execute(createCsvFileTempTableSql, new { Id = csvFileId });
-var pgCsvTextReader = connection
+var result = readConnection.Execute(createCsvFileTempTableSql, new { Id = csvFileId });
+var pgCsvTextReader = readConnection
     .BeginTextExport("copy csvFile (line) TO STDOUT (FORMAT TEXT)");
-// var pgPricingBulkCopier = connection.BeginBinaryImport("");
+var createdAt = DateTime.Now;
+var bulkCopySql = File.ReadAllText("sql/onDemandPricingBulkCopy.sql");
+var pgPricingBulkCopier = writeConnection.BeginBinaryImport(bulkCopySql);
 using (var csv = new CsvReader(pgCsvTextReader, CultureInfo.InvariantCulture))
 {
     var records = csv.GetRecords<dynamic>();
@@ -72,56 +77,59 @@ using (var csv = new CsvReader(pgCsvTextReader, CultureInfo.InvariantCulture))
         //convert to poco
         var recordDictionary = ((IEnumerable<KeyValuePair<string, object>>)record)
             .ToDictionary(kv => kv.Key, kv => kv.Value);
-        var onDemandPrice = new OnDemandPrice()
-        {
-            SKU = recordDictionary["SKU"].ToString(),
-            CreatedAt = DateTime.Now,
-            OnDemandCsvRowsId = csvFileId,
-            OfferTermCode = recordDictionary["OfferTermCode"].ToString(),
-            RateCode = recordDictionary["RateCode"].ToString(),
-            TermType = recordDictionary["TermType"].ToString(),
-            PriceDescription = recordDictionary["PriceDescription"].ToString(),
-            EffectiveDate = recordDictionary["EffectiveDate"].ToString(),
-            StartingRange = recordDictionary["StartingRange"].ToString(),
-            EndingRange = recordDictionary["EndingRange"].ToString(),
-            Unit = recordDictionary["Unit"].ToString(),
-            PricePerUnit = decimal.Parse(recordDictionary["PricePerUnit"].ToString()),
-            Currency = recordDictionary["Currency"].ToString(),
-            RelatedTo = recordDictionary["RelatedTo"].ToString(),
-            LeaseContractLength = recordDictionary["LeaseContractLength"].ToString(),
-            PurchaseOption = recordDictionary["PurchaseOption"].ToString(),
-            OfferingClass = recordDictionary["OfferingClass"].ToString(),
-            ProductFamily = recordDictionary["Product Family"].ToString(),
-            serviceCode = recordDictionary["serviceCode"].ToString(),
-            Location = recordDictionary["Location"].ToString(),
-            LocationType = recordDictionary["Location Type"].ToString(),
-            InstanceType = recordDictionary["Instance Type"].ToString(),
-            CurrentGeneration = recordDictionary["Current Generation"].ToString(),
-            InstanceFamily = recordDictionary["Instance Family"].ToString(),
-            vCPU = recordDictionary["vCPU"].ToString(),
-            PhysicalProcessor = recordDictionary["Physical Processor"].ToString(),
-            ClockSpeed = recordDictionary["Clock Speed"].ToString(),
-            Memory = recordDictionary["Memory"].ToString(),
-            Storage = recordDictionary["Storage"].ToString(),
-            NetworkPerformance = recordDictionary["Network Performance"].ToString(),
-            ProcessorArchitecture = recordDictionary["Processor Architecture"].ToString(),
-            Tenancy = recordDictionary["Tenancy"].ToString(),
-            OperatingSystem = recordDictionary["Operating System"].ToString(),
-            LicenseModel = recordDictionary["License Model"].ToString(),
-            GPU = recordDictionary["GPU"].ToString(),
-            GpuMemory = recordDictionary["GPU Memory"].ToString(),
-            instanceSKU = recordDictionary["instanceSKU"].ToString(),
-            MarketOption = recordDictionary["MarketOption"].ToString(),
-            NormalizationSizeFactor = recordDictionary["Normalization Size Factor"].ToString(),
-            PhysicalCores = recordDictionary["Physical Cores"].ToString(),
-            ProcessorFeatures = recordDictionary["Processor Features"].ToString(),
-            RegionCode = recordDictionary["Region Code"].ToString(),
-            serviceName = recordDictionary["serviceName"].ToString(),
-        };
-        
+        var onDemandPrice = OnDemandPrice.Convert(csvFileId, createdAt, recordDictionary);
+
         //write to bulk copier
-        Log.Information("here");
+        await pgPricingBulkCopier.StartRowAsync();
+        await pgPricingBulkCopier.WriteAsync(onDemandPrice.CreatedAt.ToUniversalTime(), NpgsqlDbType.TimestampTz);
+        await pgPricingBulkCopier.WriteAsync(onDemandPrice.SKU, NpgsqlDbType.Text);
+        await pgPricingBulkCopier.WriteAsync(onDemandPrice.OnDemandCsvFilesId, NpgsqlDbType.Bigint);
+        await pgPricingBulkCopier.WriteAsync(onDemandPrice.OnDemandCsvRowsId, NpgsqlDbType.Bigint);
+        await pgPricingBulkCopier.WriteAsync(onDemandPrice.OfferTermCode, NpgsqlDbType.Text);
+        await pgPricingBulkCopier.WriteAsync(onDemandPrice.RateCode, NpgsqlDbType.Text);
+        await pgPricingBulkCopier.WriteAsync(onDemandPrice.TermType, NpgsqlDbType.Text);
+        await pgPricingBulkCopier.WriteAsync(onDemandPrice.PriceDescription, NpgsqlDbType.Text);
+        await pgPricingBulkCopier.WriteAsync(onDemandPrice.EffectiveDate, NpgsqlDbType.Date);
+        await pgPricingBulkCopier.WriteAsync(onDemandPrice.StartingRange, NpgsqlDbType.Text);
+        await pgPricingBulkCopier.WriteAsync(onDemandPrice.EndingRange, NpgsqlDbType.Text);
+        await pgPricingBulkCopier.WriteAsync(onDemandPrice.Unit, NpgsqlDbType.Text);
+        await pgPricingBulkCopier.WriteAsync(onDemandPrice.PricePerUnit, NpgsqlDbType.Money);
+        await pgPricingBulkCopier.WriteAsync(onDemandPrice.Currency, NpgsqlDbType.Text);
+        await pgPricingBulkCopier.WriteAsync(onDemandPrice.RelatedTo, NpgsqlDbType.Text);
+        await pgPricingBulkCopier.WriteAsync(onDemandPrice.LeaseContractLength, NpgsqlDbType.Text);
+        await pgPricingBulkCopier.WriteAsync(onDemandPrice.PurchaseOption, NpgsqlDbType.Text);
+        await pgPricingBulkCopier.WriteAsync(onDemandPrice.OfferingClass, NpgsqlDbType.Text);
+        await pgPricingBulkCopier.WriteAsync(onDemandPrice.ProductFamily, NpgsqlDbType.Text);
+        await pgPricingBulkCopier.WriteAsync(onDemandPrice.serviceCode, NpgsqlDbType.Text);
+        await pgPricingBulkCopier.WriteAsync(onDemandPrice.Location, NpgsqlDbType.Text);
+        await pgPricingBulkCopier.WriteAsync(onDemandPrice.LocationType, NpgsqlDbType.Text);
+        await pgPricingBulkCopier.WriteAsync(onDemandPrice.InstanceType, NpgsqlDbType.Text);
+        await pgPricingBulkCopier.WriteAsync(onDemandPrice.CurrentGeneration, NpgsqlDbType.Text);
+        await pgPricingBulkCopier.WriteAsync(onDemandPrice.InstanceFamily, NpgsqlDbType.Text);
+        await pgPricingBulkCopier.WriteAsync(onDemandPrice.vCPU, NpgsqlDbType.Text);
+        await pgPricingBulkCopier.WriteAsync(onDemandPrice.PhysicalProcessor, NpgsqlDbType.Text);
+        await pgPricingBulkCopier.WriteAsync(onDemandPrice.ClockSpeed, NpgsqlDbType.Text);
+        await pgPricingBulkCopier.WriteAsync(onDemandPrice.Memory, NpgsqlDbType.Text);
+        await pgPricingBulkCopier.WriteAsync(onDemandPrice.Storage, NpgsqlDbType.Text);
+        await pgPricingBulkCopier.WriteAsync(onDemandPrice.NetworkPerformance, NpgsqlDbType.Text);
+        await pgPricingBulkCopier.WriteAsync(onDemandPrice.ProcessorArchitecture, NpgsqlDbType.Text);
+        await pgPricingBulkCopier.WriteAsync(onDemandPrice.Tenancy, NpgsqlDbType.Text);
+        await pgPricingBulkCopier.WriteAsync(onDemandPrice.OperatingSystem, NpgsqlDbType.Text);
+        await pgPricingBulkCopier.WriteAsync(onDemandPrice.LicenseModel, NpgsqlDbType.Text);
+        await pgPricingBulkCopier.WriteAsync(onDemandPrice.GPU, NpgsqlDbType.Text);
+        await pgPricingBulkCopier.WriteAsync(onDemandPrice.GpuMemory, NpgsqlDbType.Text);
+        await pgPricingBulkCopier.WriteAsync(onDemandPrice.instanceSKU, NpgsqlDbType.Text);
+        await pgPricingBulkCopier.WriteAsync(onDemandPrice.MarketOption, NpgsqlDbType.Text);
+        await pgPricingBulkCopier.WriteAsync(onDemandPrice.NormalizationSizeFactor, NpgsqlDbType.Text);
+        await pgPricingBulkCopier.WriteAsync(onDemandPrice.PhysicalCores, NpgsqlDbType.Text);
+        await pgPricingBulkCopier.WriteAsync(onDemandPrice.ProcessorFeatures, NpgsqlDbType.Text);
+        await pgPricingBulkCopier.WriteAsync(onDemandPrice.RegionCode, NpgsqlDbType.Text);
+        await pgPricingBulkCopier.WriteAsync(onDemandPrice.serviceName, NpgsqlDbType.Text);
     }
+
+    await pgPricingBulkCopier.CompleteAsync();
 }
+
+await readConnection.CloseAsync();
 
 Log.Information("fin");
