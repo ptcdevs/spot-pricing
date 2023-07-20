@@ -62,7 +62,7 @@ jobs:
         with:
           file: ./Dockerfile
           tags: ghcr.io/ptcdevs/spot-pricing:${{ needs.set-refs.outputs.branch }}
-          push: false
+          push: true
     outputs:
       docker-tag: ${{ steps.set-docker-tag.outputs.docker-tag }}
   helm-deploy:
