@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - master
+      - provision-dev
   pull_request:
     branches:
       - master
