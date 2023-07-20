@@ -61,7 +61,7 @@ jobs:
         uses: docker/build-push-action@v4
         with:
           file: ./Dockerfile
-          tags: ghcr.io/ptcdevs/aws-restapi:${{ needs.set-refs.outputs.branch }}
+          tags: ghcr.io/ptcdevs/spot-pricing:${{ needs.set-refs.outputs.branch }}
           push: false
     outputs:
       docker-tag: ${{ steps.set-docker-tag.outputs.docker-tag }}
