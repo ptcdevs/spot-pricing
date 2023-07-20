@@ -274,20 +274,22 @@ app.MapGet("parseondemandpricing", async (
     AwsMultiClient awsMultiClient, CancellationToken cancelToken) =>
 {
     var unparsedCsvFileIdsSql = await File.ReadAllTextAsync("sql/unparsedCsvFileIds.sql");
-    var csvFileIds = connection.Query<long>(unparsedCsvFileIdsSql)
+    var csvFiles = connection
+        .Query<OnDemandCsvFile>(@"select * from  ""OnDemandCsvFiles""")
         .Take(1);
     var semaphore = new SemaphoreSlim(1);
-    var resultTasks = csvFileIds
-        .Select(async csvFileId =>
+    var resultTasks = csvFiles
+        .Select(async csvFile =>
         {
             try
             {
+                Log.Information("parsing csv file id ({csvFileId}) from url: {csvFileUrl}", csvFile.Id, csvFile.Url);
                 semaphore.Wait();
-                return await awsMultiClient.ParseOnDemandPricingAsync(csvFileId, connectionStringBuilder, cancelToken);
+                return await awsMultiClient.ParseOnDemandPricingAsync(csvFile.Id, connectionStringBuilder, cancelToken);
             }
             catch (Exception ex)
             {
-                Log.Error("exception pricing csfFileId: {csfFileId}", csvFileId);
+                Log.Error("error parsing csv file id ({csvFileId}) from url: {csvFileUrl}", csvFile.Id, csvFile.Url);
                 throw ex;
             }
             finally
