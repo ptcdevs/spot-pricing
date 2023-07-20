@@ -9,3 +9,11 @@ template:
 		--set ingress.hosts.0.host=${GITREF} \
 		--set ingress.hosts.0.paths.0.path="/" \
 		--set ingress.hosts.0.paths.0.pathType=ImplementationSpecific
+
+install:
+	helm -n dev install spot-pricing-${GITREF} ./spot-pricing \
+		--set image.tag=${GITREF} \
+		--set ingress.hosts.0.host=${GITREF} \
+		--set ingress.hosts.0.paths.0.path="/" \
+		--set ingress.hosts.0.paths.0.pathType=ImplementationSpecific \
+		--wait
