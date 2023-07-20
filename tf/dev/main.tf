@@ -19,6 +19,17 @@ data linode_lke_cluster ptcdevk8s {
 }
 
 module lks {
-  source = "../mods/lks"
-  K8S_NAMESPACE = "spot-pricing-dev"
+  source    = "../mods/lks"
+  providers = {
+    kubernetes = kubernetes.ptcdevs
+  }
+  github-token  = var.GITHUB_TOKEN
+  k8s-namespace = "spot-pricing-dev"
+}
+
+module github {
+  source       = "../mods/github"
+  env          = "dev"
+  repo         = "spot-pricing"
+  github-token = var.GITHUB_TOKEN
 }

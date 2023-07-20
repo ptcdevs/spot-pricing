@@ -1,5 +1,9 @@
 terraform {
   required_providers {
+    linode = {
+      source  = "linode/linode"
+      version = "1.29.4"
+    }
     github = {
       source  = "integrations/github"
       version = "5.11.0"
@@ -7,10 +11,6 @@ terraform {
     kubernetes = {
       source  = "hashicorp/kubernetes"
       version = "2.16.1"
-    }
-    linode = {
-      source  = "linode/linode"
-      version = "1.29.4"
     }
     helm = {
       source = "hashicorp/helm"

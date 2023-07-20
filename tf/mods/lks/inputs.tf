@@ -1,1 +1,2 @@
-variable K8S_NAMESPACE {}
+variable github-token {}
+variable k8s-namespace {}
