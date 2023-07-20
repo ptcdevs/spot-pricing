@@ -1,4 +1,1 @@
 #!make
-
-connect:
-	terraform login

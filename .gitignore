@@ -42,3 +42,4 @@ Desktop.ini
 /csharp/aws-restapi/Properties/launchSettings.json
 **/*-secret.env
 **/*-secret.yaml
+**/.terraform/
