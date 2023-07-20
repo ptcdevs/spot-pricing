@@ -83,17 +83,20 @@ jobs:
           method: kubeconfig
           kubeconfig: ${{ secrets.KUBECONFIG }}
           context: lke77314-ctx
-#      - name: Helm uninstall
-#        run: helm -n dev uninstall python-restapi-${TAG}
-#        env:
-#          TAG: ${{ needs.set-refs.outputs.branch }}
-#        continue-on-error: true
-#      - id: helm-install
-#        name: Helm install
-#        run: |
-#          helm -n dev install python-restapi-${TAG} ./python-restapi \
-#            --set image.tag=${TAG} \
-#            --wait >> $GITHUB_STEP_SUMMARY
-#        working-directory: helm
-#        env:
-#          TAG: ${{ needs.set-refs.outputs.branch }}
+      - name: Helm uninstall
+        run: helm -n dev uninstall spot-pricing-${TAG}
+        env:
+          TAG: ${{ needs.set-refs.outputs.branch }}
+        continue-on-error: true
+      - id: helm-install
+        name: Helm install
+        run: |
+          helm -n dev install spot-pricing-${TAG} ./spot-pricing \
+            --set image.tag=${TAG} \
+            --set ingress.hosts.0.host=${TAG} \
+            --set ingress.hosts.0.paths.0.path="/" \
+            --set ingress.hosts.0.paths.0.pathType=ImplementationSpecific
+            --wait >> $GITHUB_STEP_SUMMARY
+        working-directory: helm
+        env:
+          TAG: ${{ needs.set-refs.outputs.branch }}
