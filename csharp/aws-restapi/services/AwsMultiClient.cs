@@ -180,7 +180,7 @@ public class AwsMultiClient
         return spotPrices;
     }
 
-    public async Task<GetPriceListFileUrlResponse[]> GetPriceFileDownloadUrlsAsync()
+    public async Task<GetPriceListFileUrlResponse[]> GetPriceFileDownloadUrlsAsync(CancellationToken cancellationToken)
     {
         var client = RegionalPricingClients.First();
         var serviceCode = "AmazonEC2";
@@ -189,8 +189,9 @@ public class AwsMultiClient
         var currencyCode = "USD";
         var httpClient = new HttpClient();
         var versionIndexFileResponse = await httpClient
-            .GetAsync("https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/index.json");
-        var versionIndexJson = await versionIndexFileResponse.Content.ReadAsStringAsync();
+            .GetAsync("https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/index.json",
+                cancellationToken);
+        var versionIndexJson = await versionIndexFileResponse.Content.ReadAsStringAsync(cancellationToken);
         var versionIndex = JObject.Parse(versionIndexJson);
         var effectiveDates = versionIndex["versions"]
             .Select(jToken => ((JProperty)jToken).Name)
@@ -210,7 +211,7 @@ public class AwsMultiClient
                         CurrencyCode = currencyCode,
                         EffectiveDate = effectiveDate,
                         // RegionCode = regionCodes.First(),
-                    });
+                    }, cancellationToken);
 
                 return new
                 {
@@ -236,7 +237,7 @@ public class AwsMultiClient
             {
                 FileFormat = "csv",
                 PriceListArn = priceListArn.priceListArn,
-            }))
+            }, cancellationToken))
             .ToList();
         var downloadUrls = await Task.WhenAll(downloadUrlsResponse);
         return downloadUrls;
@@ -322,165 +323,115 @@ public class AwsMultiClient
         DbConnectionStringBuilder connectionStringBuilder,
         CancellationToken cancellationToken = default(CancellationToken))
     {
-        try
+        var stopWatch = new Stopwatch();
+        stopWatch.Start();
+
+        await using var connection = new NpgsqlConnection(connectionStringBuilder.ToString());
+        await connection.OpenAsync(cancellationToken);
+
+        //start download of file
+        var httpClient = new HttpClient();
+        var response = await httpClient.GetStreamAsync(priceFileDownloadUrl.Url, cancellationToken);
+        var tempFile = Path.GetTempFileName();
+        Log.Information($"tempFile: {tempFile}");
+        using var awsDownloadStreamReader = new StreamReader(response);
+
+        // write csv to temp file
+        await using (var outputFile = new StreamWriter(tempFile))
         {
-            var stopWatch = new Stopwatch();
-            stopWatch.Start();
-
-            await using var connection = new NpgsqlConnection(connectionStringBuilder.ToString());
-            await connection.OpenAsync(cancellationToken);
-
-            //start download of file
-            var httpClient = new HttpClient();
-            var response = await httpClient.GetStreamAsync(priceFileDownloadUrl.Url, cancellationToken);
-            var tempFile = Path.GetTempFileName();
-            Log.Information($"tempFile: {tempFile}");
-            using var awsDownloadStreamReader = new StreamReader(response);
-
-            // write csv to temp file
-            await using (var outputFile = new StreamWriter(tempFile))
+            while (await awsDownloadStreamReader.ReadLineAsync() is { } line)
             {
-                while (await awsDownloadStreamReader.ReadLineAsync() is { } line)
-                {
-                    await outputFile.WriteLineAsync(line);
-                }
+                await outputFile.WriteLineAsync(line);
             }
-
-            awsDownloadStreamReader.Close();
-
-            // open file
-            var fileLines = new StreamReader(tempFile);
-
-            var boilerplate = Enumerable.Range(0, 5)
-                .Select(line => fileLines.ReadLine())
-                .ToList();
-            var csvHeader = fileLines.ReadLine();
-            var csvRecordsCreatedAt = DateTime.Now;
-            var onDemandCsvFile = new OnDemandCsvFile()
-            {
-                CreatedAt = csvRecordsCreatedAt,
-                Url = priceFileDownloadUrl.Url,
-                Header = csvHeader,
-            };
-            connection.SingleInsert(onDemandCsvFile);
-            var writer = await connection
-                .BeginBinaryImportAsync(
-                    @"COPY ""OnDemandCsvRows"" (""OnDemandCsvFilesId"", ""CreatedAt"", ""Row"") FROM STDIN (FORMAT BINARY) ",
-                    cancellationToken);
-            int i = 0;
-
-            for (; await fileLines.ReadLineAsync() is { } line; i++)
-            {
-                await writer.StartRowAsync(cancellationToken);
-                await writer.WriteAsync(onDemandCsvFile.Id, NpgsqlDbType.Bigint, cancellationToken);
-                await writer.WriteAsync(csvRecordsCreatedAt, NpgsqlDbType.Timestamp, cancellationToken);
-                await writer.WriteAsync(line, NpgsqlDbType.Text, cancellationToken);
-                if (i % 100000 == 0) Console.WriteLine($"{i} rows inserted");
-            }
-
-            await writer.CompleteAsync(cancellationToken);
-            await connection.CloseAsync();
-            fileLines.Close();
-            File.Delete(tempFile);
-
-            Log.Information($"{i} rows bulk copied");
-
-            stopWatch.Stop();
-            return new DownloadPriceFileResult()
-            {
-                OnDemandCsvFile = onDemandCsvFile,
-                RowsUploaded = i,
-                TimeElapsed = stopWatch.Elapsed
-            };
         }
-        catch (Exception ex)
+
+        awsDownloadStreamReader.Close();
+
+        // open file
+        var fileLines = new StreamReader(tempFile);
+
+        var boilerplate = Enumerable.Range(0, 5)
+            .Select(line => fileLines.ReadLine())
+            .ToList();
+        var csvHeader = fileLines.ReadLine();
+        var csvRecordsCreatedAt = DateTime.Now;
+        var onDemandCsvFile = new OnDemandCsvFile()
         {
-            Log.Error(ex, "error downloading price file from {Url}", priceFileDownloadUrl.Url);
-            throw new NotImplementedException();
+            CreatedAt = csvRecordsCreatedAt,
+            Url = priceFileDownloadUrl.Url,
+            Header = csvHeader,
+        };
+        connection.SingleInsert(onDemandCsvFile);
+        var writer = await connection
+            .BeginBinaryImportAsync(
+                @"COPY ""OnDemandCsvRows"" (""OnDemandCsvFilesId"", ""CreatedAt"", ""Row"") FROM STDIN (FORMAT BINARY) ",
+                cancellationToken);
+        int i = 0;
+
+        for (; await fileLines.ReadLineAsync() is { } line; i++)
+        {
+            await writer.StartRowAsync(cancellationToken);
+            await writer.WriteAsync(onDemandCsvFile.Id, NpgsqlDbType.Bigint, cancellationToken);
+            await writer.WriteAsync(csvRecordsCreatedAt, NpgsqlDbType.Timestamp, cancellationToken);
+            await writer.WriteAsync(line, NpgsqlDbType.Text, cancellationToken);
+            if (i % 100000 == 0) Console.WriteLine($"{i} rows inserted");
         }
+
+        await writer.CompleteAsync(cancellationToken);
+        await connection.CloseAsync();
+        fileLines.Close();
+        File.Delete(tempFile);
+
+        Log.Information($"{i} rows bulk copied");
+
+        stopWatch.Stop();
+        return new DownloadPriceFileResult()
+        {
+            OnDemandCsvFile = onDemandCsvFile,
+            RowsUploaded = i,
+            TimeElapsed = stopWatch.Elapsed
+        };
     }
 
-    public async Task<ParseOnDemandPricingResult> ParseOnDemandPricingAsync(long csvFileId, NpgsqlConnectionStringBuilder connectionStringBuilder)
+    public async Task<ParseOnDemandPricingResult> ParseOnDemandPricingAsync(long csvFileId,
+        NpgsqlConnectionStringBuilder connectionStringBuilder,
+        CancellationToken cancellationToken = default(CancellationToken))
     {
-        var stopWatch = new Stopwatch(); 
+        var stopWatch = new Stopwatch();
         stopWatch.Start();
         await using var readConnection = new NpgsqlConnection(connectionStringBuilder.ToString());
         await using var writeConnection = new NpgsqlConnection(connectionStringBuilder.ToString());
-        await readConnection.OpenAsync();
-        await writeConnection.OpenAsync();
-        var createCsvFileTempTableSql = await File.ReadAllTextAsync("sql/createCsvFileTempTable.sql");
-        var csvFileTempTableCreationResult = await readConnection
-            .ExecuteAsync(createCsvFileTempTableSql, new { Id = csvFileId });
+        await readConnection.OpenAsync(cancellationToken);
+        await writeConnection.OpenAsync(cancellationToken);
+        var createCsvFileTempTableSql =
+            await File.ReadAllTextAsync("sql/createCsvFileTempTable.sql", cancellationToken);
+        var tempTablePrepResult = await readConnection
+            .ExecuteAsync(createCsvFileTempTableSql, new { Id = csvFileId }, commandTimeout: 600);
         var pgCsvTextReader = await readConnection
-            .BeginTextExportAsync("copy csvFile (line) TO STDOUT (FORMAT TEXT)");
+            .BeginTextExportAsync("copy csvFile (line) TO STDOUT (FORMAT TEXT)", cancellationToken);
         var createdAt = DateTimeOffset.Now;
-        var bulkCopySql = await File.ReadAllTextAsync("sql/onDemandPricingBulkCopy.sql");
-        var pgPricingBulkCopier = await writeConnection.BeginBinaryImportAsync(bulkCopySql);
+        var bulkCopySql = await File.ReadAllTextAsync("sql/onDemandPricingBulkCopy.sql", cancellationToken);
+        var pgPricingBulkCopier = await writeConnection.BeginBinaryImportAsync(bulkCopySql, cancellationToken);
         int recordsCopied = 0;
         using var csv = new CsvReader(pgCsvTextReader, CultureInfo.InvariantCulture);
         var records = csv.GetRecords<dynamic>();
         foreach (var record in records)
         {
-            if (recordsCopied % 1000 == 0) Log.Information("{recordsCopied} records copied", recordsCopied);
+            if (recordsCopied % 10000 == 0) Log.Information("{recordsCopied} records copied", recordsCopied);
             //convert to poco
             var recordDictionary = ((IEnumerable<KeyValuePair<string, object>>)record)
                 .ToDictionary(kv => kv.Key, kv => kv.Value);
             var onDemandPrice = OnDemandPrice.Convert(recordDictionary);
-            await OnDemandPrice.BulkCopy(pgPricingBulkCopier, createdAt, onDemandPrice);
+            await OnDemandPrice.BulkCopy(pgPricingBulkCopier, createdAt, onDemandPrice, cancellationToken);
             recordsCopied += 1;
-            //write to bulk copier
-            // await pgPricingBulkCopier.StartRowAsync();
-            // await pgPricingBulkCopier.WriteAsync(createdAt.ToUniversalTime(), NpgsqlDbType.TimestampTz);
-            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.SKU, NpgsqlDbType.Text);
-            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.OnDemandCsvFilesId, NpgsqlDbType.Bigint);
-            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.OnDemandCsvRowsId, NpgsqlDbType.Bigint);
-            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.OfferTermCode, NpgsqlDbType.Text);
-            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.RateCode, NpgsqlDbType.Text);
-            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.TermType, NpgsqlDbType.Text);
-            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.PriceDescription, NpgsqlDbType.Text);
-            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.EffectiveDate, NpgsqlDbType.Date);
-            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.StartingRange, NpgsqlDbType.Text);
-            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.EndingRange, NpgsqlDbType.Text);
-            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.Unit, NpgsqlDbType.Text);
-            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.PricePerUnit, NpgsqlDbType.Money);
-            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.Currency, NpgsqlDbType.Text);
-            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.RelatedTo, NpgsqlDbType.Text);
-            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.LeaseContractLength, NpgsqlDbType.Text);
-            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.PurchaseOption, NpgsqlDbType.Text);
-            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.OfferingClass, NpgsqlDbType.Text);
-            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.ProductFamily, NpgsqlDbType.Text);
-            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.serviceCode, NpgsqlDbType.Text);
-            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.Location, NpgsqlDbType.Text);
-            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.LocationType, NpgsqlDbType.Text);
-            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.InstanceType, NpgsqlDbType.Text);
-            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.CurrentGeneration, NpgsqlDbType.Text);
-            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.InstanceFamily, NpgsqlDbType.Text);
-            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.vCPU, NpgsqlDbType.Text);
-            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.PhysicalProcessor, NpgsqlDbType.Text);
-            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.ClockSpeed, NpgsqlDbType.Text);
-            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.Memory, NpgsqlDbType.Text);
-            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.Storage, NpgsqlDbType.Text);
-            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.NetworkPerformance, NpgsqlDbType.Text);
-            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.ProcessorArchitecture, NpgsqlDbType.Text);
-            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.Tenancy, NpgsqlDbType.Text);
-            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.OperatingSystem, NpgsqlDbType.Text);
-            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.LicenseModel, NpgsqlDbType.Text);
-            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.GPU, NpgsqlDbType.Text);
-            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.GpuMemory, NpgsqlDbType.Text);
-            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.instanceSKU, NpgsqlDbType.Text);
-            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.MarketOption, NpgsqlDbType.Text);
-            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.NormalizationSizeFactor, NpgsqlDbType.Text);
-            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.PhysicalCores, NpgsqlDbType.Text);
-            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.ProcessorFeatures, NpgsqlDbType.Text);
-            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.RegionCode, NpgsqlDbType.Text);
-            // await pgPricingBulkCopier.WriteAsync(onDemandPrice.serviceName, NpgsqlDbType.Text);
         }
 
-        await pgPricingBulkCopier.CompleteAsync();
+        Log.Information("{recordsCopied} records copied", recordsCopied);
 
+        await pgPricingBulkCopier.CompleteAsync(cancellationToken);
         await readConnection.CloseAsync();
         await writeConnection.CloseAsync();
-        
+
         stopWatch.Stop();
         return new ParseOnDemandPricingResult()
         {

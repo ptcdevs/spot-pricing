@@ -223,14 +223,17 @@ app.MapGet("syncgpuspotpricing", async (NpgsqlConnection connection, AwsMultiCli
 app.MapGet("syncondemandpricing", async (
         NpgsqlConnectionStringBuilder connectionStringBuilder,
         NpgsqlConnection connection,
-        AwsMultiClient awsMultiClient) =>
+        AwsMultiClient awsMultiClient
+        , CancellationToken cancelToken) =>
     {
         var onDemandPriceUrlsFetchedSql = File.ReadAllText("sql/onDemandPriceUrlsFetched.sql");
-        var onDemandPriceUrlsFetched = await connection.QueryAsync<string>(onDemandPriceUrlsFetchedSql);
+        var onDemandPriceUrlsFetched = await connection
+            .QueryAsync<string>(onDemandPriceUrlsFetchedSql, commandTimeout: 300);
 
-        var priceFileUrlResponses = await awsMultiClient.GetPriceFileDownloadUrlsAsync();
+        var priceFileUrlResponses = await awsMultiClient.GetPriceFileDownloadUrlsAsync(cancelToken);
         var priceUrlsToFetch = priceFileUrlResponses
             .Where(resp => !onDemandPriceUrlsFetched.Contains(resp.Url))
+            .Take(3)
             .ToList();
         var semaphore = new SemaphoreSlim(1);
         var downloads = priceUrlsToFetch
@@ -239,8 +242,14 @@ app.MapGet("syncondemandpricing", async (
                 try
                 {
                     semaphore.Wait();
-                    Log.Information($"url: {priceFileDownloadUrl.Url}");
-                    return await awsMultiClient.DownloadPriceFileAsync(priceFileDownloadUrl, connectionStringBuilder);
+                    Log.Information(" downloading url: {priceFileUrl}", priceFileDownloadUrl.Url);
+                    return await awsMultiClient.DownloadPriceFileAsync(priceFileDownloadUrl, connectionStringBuilder,
+                        cancelToken);
+                }
+                catch (Exception ex)
+                {
+                    Log.Error(ex, "error with {priceFileDownloadUrl}", priceFileDownloadUrl.Url);
+                    throw ex;
                 }
                 finally
                 {
@@ -251,8 +260,6 @@ app.MapGet("syncondemandpricing", async (
 
         var downloadPriceFileResults = await Task.WhenAll(downloads);
 
-        Log.Information(string.Join("\n", downloadPriceFileResults.Select(result => result.ToString())));
-        Log.Information("fin");
         return new
         {
             priceUrlsToFetch,
@@ -264,10 +271,11 @@ app.MapGet("syncondemandpricing", async (
 app.MapGet("parseondemandpricing", async (
     NpgsqlConnection connection,
     NpgsqlConnectionStringBuilder connectionStringBuilder,
-    AwsMultiClient awsMultiClient) =>
+    AwsMultiClient awsMultiClient, CancellationToken cancelToken) =>
 {
     var unparsedCsvFileIdsSql = await File.ReadAllTextAsync("sql/unparsedCsvFileIds.sql");
-    var csvFileIds = connection.Query<long>(unparsedCsvFileIdsSql);
+    var csvFileIds = connection.Query<long>(unparsedCsvFileIdsSql)
+        .Take(3);
     var semaphore = new SemaphoreSlim(1);
     var resultTasks = csvFileIds
         .Select(async csvFileId =>
@@ -275,10 +283,11 @@ app.MapGet("parseondemandpricing", async (
             try
             {
                 semaphore.Wait();
-                return await awsMultiClient.ParseOnDemandPricingAsync(csvFileId, connectionStringBuilder);
+                return await awsMultiClient.ParseOnDemandPricingAsync(csvFileId, connectionStringBuilder, cancelToken);
             }
             catch (Exception ex)
             {
+                Log.Error("exception pricing csfFileId: {csfFileId}", csvFileId);
                 throw ex;
             }
             finally
