@@ -222,7 +222,7 @@ app.MapGet("syncgpuspotpricing", async (NpgsqlConnection connection, AwsMultiCli
     .RequireAuthorization("ValidGithubUser");
 app.MapGet("syncondemandpricing", async (
         NpgsqlConnectionStringBuilder connectionStringBuilder,
-        NpgsqlConnection connection, 
+        NpgsqlConnection connection,
         AwsMultiClient awsMultiClient) =>
     {
         var onDemandPriceUrlsFetchedSql = File.ReadAllText("sql/onDemandPriceUrlsFetched.sql");
