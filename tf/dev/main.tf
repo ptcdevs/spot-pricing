@@ -18,3 +18,7 @@ data linode_lke_cluster ptcdevk8s {
   id = 77314
 }
 
+module lks {
+  source = "../mods/lks"
+  K8S_NAMESPACE = "spot-pricing-dev"
+}
