@@ -17,3 +17,11 @@ Accept: application/json
 ###  old version (big file)
 GET https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/20230705170251/index.json
 Accept: application/json
+
+### download ec2 price list csv 20230713184719
+GET https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/20230713184719/us-east-1/index.csv
+Accept: application/json
+
+### download ec2 price list json 20230713184719
+GET https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/20230713184719/us-east-1/index.json
+Accept: application/json

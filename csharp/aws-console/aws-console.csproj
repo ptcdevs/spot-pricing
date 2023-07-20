@@ -9,7 +9,7 @@
     </PropertyGroup>
 
     <ItemGroup>
-      <PackageReference Include="AWSSDK.EC2" Version="3.7.140.2" />
+      <PackageReference Include="AWSSDK.EC2" Version="3.7.141" />
       <PackageReference Include="Dapper" Version="2.0.143" />
       <PackageReference Include="Dapper.Extensions.PostgreSQL" Version="4.2.2" />
       <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="6.0.1" />
@@ -36,6 +36,25 @@
       <None Update="queries\dedup.sql">
         <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       </None>
+      <None Update="sql\effectiveDatesRegionsFetched.sql">
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      </None>
+      <None Update="sql\onDemandPriceUrlsFetched.sql">
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      </None>
+      <None Update="sql\getCsvFileStream.sql">
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      </None>
+      <None Update="sql\createCsvFileTempTable.sql">
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      </None>
+      <None Update="sql\onDemandPricingBulkCopy.sql">
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      </None>
+    </ItemGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\aws-restapi\aws-restapi.csproj" />
     </ItemGroup>
 
 </Project>

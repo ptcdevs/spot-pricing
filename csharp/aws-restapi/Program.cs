@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Amazon;
 using Amazon.EC2.Model;
 using Amazon.Pricing;
@@ -73,23 +74,33 @@ builder.Services.AddSwaggerGen(options =>
 });
 
 // database config
-var npgsqlConnectionStringBuilder = new NpgsqlConnectionStringBuilder()
-{
-    Host = config["postgres:host"],
-    Port = int.Parse(config["postgres:port"] ?? string.Empty),
-    Database = config["postgres:database"],
-    Username = config["postgres:username"],
-    Password = config["POSTGRESQL_PASSWORD"],
-    SslMode = SslMode.VerifyCA,
-    RootCertificate = "sql/ptcdevs-psql-ca-certificate.crt",
-};
-builder.Services.AddScoped<NpgsqlConnection>(provider =>
-    new NpgsqlConnection(npgsqlConnectionStringBuilder.ToString()));
+builder.Services
+    .AddScoped<NpgsqlConnectionStringBuilder>(provider => new NpgsqlConnectionStringBuilder()
+    {
+        Host = config["postgres:host"],
+        Port = int.Parse(config["postgres:port"] ?? string.Empty),
+        Database = config["postgres:database"],
+        Username = config["postgres:username"],
+        Password = config["POSTGRESQL_PASSWORD"],
+        SslMode = SslMode.VerifyCA,
+        RootCertificate = "sql/ptcdevs-psql-ca-certificate.crt",
+    })
+    .AddScoped<NpgsqlConnection>(provider =>
+    {
+        var npgsqlConnectionStringBuilder = provider.GetService<NpgsqlConnectionStringBuilder>();
+        return new NpgsqlConnection(npgsqlConnectionStringBuilder.ToString());
+    });
 DapperPlusManager.Entity<SpotPrice>()
     .Table("SpotPrices")
     .Identity(x => x.Id);
 DapperPlusManager.Entity<QueryRun>()
     .Table("QueriesRun")
+    .Identity(x => x.Id);
+DapperPlusManager.Entity<OnDemandCsvFile>()
+    .Table("OnDemandCsvFiles")
+    .Identity(x => x.Id);
+DapperPlusManager.Entity<OnDemandCsvRow>()
+    .Table("OnDemandCsvRows")
     .Identity(x => x.Id);
 
 //aws config
@@ -129,14 +140,16 @@ app.MapGet("authorize", () => "authorized")
 app.MapGet("unauthorized", () => Results.Unauthorized());
 app.MapGet("syncgpuspotpricing", async (NpgsqlConnection connection, AwsMultiClient awsMultiClient) =>
     {
+        var stopWatch = new Stopwatch();
+        stopWatch.Start();
         await connection.OpenAsync();
 
-        var datesToQuerySql = File.ReadAllText("sql/dates-hours-tofetch.sql");
+        var datesToQuerySql = File.ReadAllText("sql/gpu-spotprice-datehours-tofetch.sql");
         var datesToQuery = connection.Query(datesToQuerySql)
             .ToList();
         var datesToQuerySubset = datesToQuery
-            .OrderByDescending(ts => ts.querydate)
-            .Take(25)
+            .OrderByDescending(ts => ts.starttime)
+            .Take(250)
             .ToList();
         var semaphore = new SemaphoreSlim(10);
         var results = datesToQuerySubset
@@ -145,8 +158,8 @@ app.MapGet("syncgpuspotpricing", async (NpgsqlConnection connection, AwsMultiCli
                 try
                 {
                     semaphore.Wait();
-                    var starttime = (DateTime)dateToQuery.querydate;
-                    var endtime = starttime.AddDays(1);
+                    var starttime = (DateTime)dateToQuery.starttime;
+                    var endtime = starttime.AddHours(1);
                     var instanceTypes = AwsParams.GetGpuInstances();
                     var spotPrices = await awsMultiClient
                         .SampleSpotPricing(new DescribeSpotPriceHistoryRequest
@@ -162,12 +175,12 @@ app.MapGet("syncgpuspotpricing", async (NpgsqlConnection connection, AwsMultiCli
                                 },
                             }
                         );
-                    Log.Information($"finished {dateToQuery.querydate}, retrieved {spotPrices.Count()} records");
+                    Log.Information($"finished {dateToQuery.starttime}, retrieved {spotPrices.Count()} records");
                     return spotPrices;
                 }
                 catch (Exception ex)
                 {
-                    Log.Error(ex, $"error while syncing gpu spot prices for querydate:: {dateToQuery.querydate}");
+                    Log.Error(ex, $"error while syncing gpu spot prices for querydate:: {dateToQuery.starttime}");
                     throw ex;
                 }
                 finally
@@ -184,25 +197,112 @@ app.MapGet("syncgpuspotpricing", async (NpgsqlConnection connection, AwsMultiCli
             .Select(dateToQuery => new QueryRun()
             {
                 Search = "GpuMlMain",
-                StartTime = dateToQuery.querydate,
+                StartTime = dateToQuery.starttime,
             });
 
         if (spotPrices.Any())
             connection.BulkInsert(spotPrices);
         if (queriesRun.Any())
             connection.BulkInsert(queriesRun);
+        // var spotPricesToDedupSql = await File.ReadAllTextAsync("sql/spotPricesToDedup.sql");
+        var dedupSql = await File.ReadAllTextAsync("sql/dedup.sql");
+        // var spotPricesToDedup = await connection.ExecuteAsync(spotPricesToDedupSql);
+        var dedupResult = connection.Execute(dedupSql);
+        stopWatch.Stop();
+
         return Results.Json(new
         {
             success = true,
-            datesQueried = queriesRun.Select(q => q.StartTime),
-            spotPricesInserted = spotPrices.Count()
+            spotPricesInserted = spotPrices.Count(),
+            duplicateRowsDeleted = dedupResult,
+            timeToCompletion = stopWatch.Elapsed,
+            dateTimesQueried = queriesRun.Select(q => q.StartTime),
         });
     })
     .RequireAuthorization("ValidGithubUser");
-app.MapGet("syncgpuondemandpricing", async (NpgsqlConnection connection, AwsMultiClient awsMultiClient) =>
+app.MapGet("syncondemandpricing", async (
+        NpgsqlConnectionStringBuilder connectionStringBuilder,
+        NpgsqlConnection connection,
+        AwsMultiClient awsMultiClient
+        , CancellationToken cancelToken) =>
     {
-        var pricingClient = new AmazonPricingClient();
+        var onDemandPriceUrlsFetchedSql = File.ReadAllText("sql/onDemandPriceUrlsFetched.sql");
+        var onDemandPriceUrlsFetched = await connection
+            .QueryAsync<string>(onDemandPriceUrlsFetchedSql, commandTimeout: 300);
+
+        var priceFileUrlResponses = await awsMultiClient.GetPriceFileDownloadUrlsAsync(cancelToken);
+        var priceUrlsToFetch = priceFileUrlResponses
+            .Where(resp => !onDemandPriceUrlsFetched.Contains(resp.Url))
+            .Take(1)
+            .ToList();
+        var semaphore = new SemaphoreSlim(1);
+        var downloads = priceUrlsToFetch
+            .Select(async priceFileDownloadUrl =>
+            {
+                try
+                {
+                    semaphore.Wait();
+                    Log.Information(" downloading url: {priceFileUrl}", priceFileDownloadUrl.Url);
+                    return await awsMultiClient.DownloadPriceFileAsync(priceFileDownloadUrl, connectionStringBuilder,
+                        cancelToken);
+                }
+                catch (Exception ex)
+                {
+                    Log.Error(ex, "error with {priceFileDownloadUrl}", priceFileDownloadUrl.Url);
+                    throw ex;
+                }
+                finally
+                {
+                    semaphore.Release();
+                }
+            })
+            .ToList();
+
+        var downloadPriceFileResults = await Task.WhenAll(downloads);
+
+        return new
+        {
+            priceUrlsToFetch,
+            downloadPriceFileResults
+        };
     })
     .RequireAuthorization("ValidGithubUser");
+
+app.MapGet("parseondemandpricing", async (
+    NpgsqlConnection connection,
+    NpgsqlConnectionStringBuilder connectionStringBuilder,
+    AwsMultiClient awsMultiClient, CancellationToken cancelToken) =>
+{
+    var unparsedCsvFileIdsSql = await File.ReadAllTextAsync("sql/unparsedCsvFileIds.sql");
+    var csvFiles = connection
+        .Query<OnDemandCsvFile>(@"select * from  ""OnDemandCsvFiles""")
+        .Take(1);
+    var semaphore = new SemaphoreSlim(1);
+    var resultTasks = csvFiles
+        .Select(async csvFile =>
+        {
+            try
+            {
+                Log.Information("parsing csv file id ({csvFileId}) from url: {csvFileUrl}", csvFile.Id, csvFile.Url);
+                semaphore.Wait();
+                return await awsMultiClient.ParseOnDemandPricingAsync(csvFile.Id, connectionStringBuilder, cancelToken);
+            }
+            catch (Exception ex)
+            {
+                Log.Error("error parsing csv file id ({csvFileId}) from url: {csvFileUrl}", csvFile.Id, csvFile.Url);
+                throw ex;
+            }
+            finally
+            {
+                semaphore.Release();
+            }
+        });
+
+    var results = await Task.WhenAll(resultTasks);
+    return new
+    {
+        results
+    };
+}).RequireAuthorization("ValidGithubUser");
 
 app.Run();

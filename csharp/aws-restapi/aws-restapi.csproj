@@ -19,11 +19,12 @@
         <PackageReference Include="AspNet.Security.OAuth.GitHub" Version="6.0.15" />
         <PackageReference Include="AWSSDK.EC2" Version="3.7.141" />
         <PackageReference Include="AWSSDK.Pricing" Version="3.7.102.7" />
+        <PackageReference Include="CsvHelper" Version="30.0.1" />
         <PackageReference Include="Dapper" Version="2.0.143" />
         <PackageReference Include="Z.Dapper.Plus" Version="6.0.1" />
         <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
         <PackageReference Include="Npgsql" Version="7.0.4" />
-        <PackageReference Include="Serilog" Version="3.0.2-dev-02044" />
+        <PackageReference Include="Serilog" Version="3.0.1" />
         <PackageReference Include="Serilog.Sinks.Console" Version="4.1.0" />
         <PackageReference Include="Swashbuckle.AspNetCore.Swagger" Version="6.5.0" />
         <PackageReference Include="Swashbuckle.AspNetCore.SwaggerGen" Version="6.5.0" />
@@ -42,6 +43,27 @@
         </None>
         <None Update="sql\ptcdevs-psql-ca-certificate.crt">
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+        <None Update="sql\gpu-spotprice-datehours-tofetch.sql">
+          <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+        <None Update="sql\dedup.sql">
+          <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+        <None Update="sql\spotPricesToDedup.sql">
+          <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+        <None Update="sql\onDemandPriceUrlsFetched.sql">
+          <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+        <None Update="sql\createCsvFileTempTable.sql">
+          <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+        <None Update="sql\onDemandPricingBulkCopy.sql">
+          <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+        <None Update="sql\unparsedCsvFileIds.sql">
+          <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </None>
     </ItemGroup>
 </Project>
