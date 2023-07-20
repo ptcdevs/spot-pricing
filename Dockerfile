@@ -12,10 +12,6 @@ FROM build as devbuild
 WORKDIR "/src/aws-restapi"
 RUN dotnet build "aws-restapi.csproj" -c Debug -o /app/build
 
-FROM build as prodbuild
-WORKDIR "/src/aws-restapi"
-RUN dotnet build "aws-restapi.csproj" -c Release -o /app/build
-
 FROM devbuild AS development
 EXPOSE 3000
 EXPOSE 3001
@@ -23,6 +19,10 @@ ENV ASPNETCORE_URLS=http://0.0.0.0:3000;https://0.0.0.0:3001
 ENV ASPNETCORE_ENVIRONMENT=Development
 RUN dotnet dev-certs https
 CMD ["dotnet", "run", "-c", "Debug"]
+
+FROM build as prodbuild
+WORKDIR "/src/aws-restapi"
+RUN dotnet build "aws-restapi.csproj" -c Release -o /app/build
 
 FROM build AS publish
 RUN dotnet publish "aws-restapi.csproj" -c Release -o /app/publish /p:UseAppHost=false
@@ -33,5 +33,4 @@ COPY --from=publish /app/publish .
 ENV ASPNETCORE_URLS=http://0.0.0.0:8080
 ENV ASPNETCORE_ENVIRONMENT=Production
 EXPOSE 8080
-#CMD ["dotnet", "aws-restapi.dll"]
-CMD ["sleep", "10000"]
+CMD ["dotnet", "aws-restapi.dll"]
