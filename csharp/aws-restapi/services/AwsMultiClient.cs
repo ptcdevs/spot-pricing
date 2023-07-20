@@ -374,7 +374,7 @@ public class AwsMultiClient
             await writer.WriteAsync(onDemandCsvFile.Id, NpgsqlDbType.Bigint, cancellationToken);
             await writer.WriteAsync(csvRecordsCreatedAt, NpgsqlDbType.Timestamp, cancellationToken);
             await writer.WriteAsync(line, NpgsqlDbType.Text, cancellationToken);
-            if (i % 100000 == 0) Console.WriteLine($"{i} rows inserted");
+            if (i % 50000 == 0) Log.Information("{rowsInserted} rows inserted", i);
         }
 
         await writer.CompleteAsync(cancellationToken);
@@ -382,7 +382,7 @@ public class AwsMultiClient
         fileLines.Close();
         File.Delete(tempFile);
 
-        Log.Information($"{i} rows bulk copied");
+        Log.Information("{rowsInserted} rows bulk copied", i);
 
         stopWatch.Stop();
         return new DownloadPriceFileResult()
@@ -417,7 +417,7 @@ public class AwsMultiClient
         var records = csv.GetRecords<dynamic>();
         foreach (var record in records)
         {
-            if (recordsCopied % 10000 == 0) Log.Information("{recordsCopied} records copied", recordsCopied);
+            if (recordsCopied % 50000 == 0) Log.Information("{recordsCopied} records copied", recordsCopied);
             //convert to poco
             var recordDictionary = ((IEnumerable<KeyValuePair<string, object>>)record)
                 .ToDictionary(kv => kv.Key, kv => kv.Value);
@@ -425,12 +425,11 @@ public class AwsMultiClient
             await OnDemandPrice.BulkCopy(pgPricingBulkCopier, createdAt, onDemandPrice, cancellationToken);
             recordsCopied += 1;
         }
-
-        Log.Information("{recordsCopied} records copied", recordsCopied);
-
         await pgPricingBulkCopier.CompleteAsync(cancellationToken);
         await readConnection.CloseAsync();
         await writeConnection.CloseAsync();
+        
+        Log.Information("{recordsCopied} records copied", recordsCopied);
 
         stopWatch.Stop();
         return new ParseOnDemandPricingResult()
