@@ -133,11 +133,10 @@ app.UseSwaggerUI(options =>
 {
     options.SwaggerEndpoint("/swagger/v1/swagger.json", $"{builder.Environment.ApplicationName} v1");
 });
-app.MapGet("/", () => "Hello World!")
+app.MapGet("/", () => "Hello World!");
+app.MapGet("login", () => "authorized")
     .RequireAuthorization("ValidGithubUser");
-app.MapGet("authorize", () => "authorized")
-    .RequireAuthorization("ValidGithubUser");
-app.MapGet("unauthorized", () => Results.Unauthorized());
+app.MapGet("unauthorized", Results.Unauthorized);
 app.MapGet("syncgpuspotpricing", async (NpgsqlConnection connection, AwsMultiClient awsMultiClient) =>
     {
         var stopWatch = new Stopwatch();
