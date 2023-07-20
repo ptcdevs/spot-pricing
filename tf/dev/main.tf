@@ -33,3 +33,7 @@ module github {
   repo         = "spot-pricing"
   github-token = var.GITHUB_TOKEN
 }
+
+#output kubeconfig {
+#  value = nonsensitive(base64decode(module.github.kubeconfig))
+#}

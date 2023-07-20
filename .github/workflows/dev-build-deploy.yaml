@@ -83,6 +83,8 @@ jobs:
           method: kubeconfig
           kubeconfig: ${{ secrets.KUBECONFIG }}
           context: lke77314-ctx
+      - name: List namespaces
+        run:  kubectl get namespaces
       - name: Helm uninstall
         run: helm -n dev uninstall spot-pricing-${TAG}
         env:
@@ -95,7 +97,7 @@ jobs:
             --set image.tag=${TAG} \
             --set ingress.hosts.0.host=${TAG} \
             --set ingress.hosts.0.paths.0.path="/" \
-            --set ingress.hosts.0.paths.0.pathType=ImplementationSpecific
+            --set ingress.hosts.0.paths.0.pathType=ImplementationSpecific \
             --wait >> $GITHUB_STEP_SUMMARY
         working-directory: helm
         env:

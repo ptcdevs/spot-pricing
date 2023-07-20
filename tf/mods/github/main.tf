@@ -16,7 +16,11 @@ resource github_actions_environment_secret kubeconfig {
   repository = data.github_repository.spot-pricing.name
   secret_name = "KUBECONFIG"
   #plaintext_value = data.local_sensitive_file.kubeconfig.content
-  plaintext_value = data.linode_lke_cluster.ptcdevk8s.kubeconfig
+  plaintext_value = base64decode(data.linode_lke_cluster.ptcdevk8s.kubeconfig)
+}
+
+output kubeconfig {
+  value = data.linode_lke_cluster.ptcdevk8s.kubeconfig
 }
 
 resource github_actions_environment_secret github-token {
