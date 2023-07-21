@@ -28,7 +28,7 @@ var config = new ConfigurationBuilder()
 var builder = WebApplication.CreateBuilder(args);
 Log.Logger = new LoggerConfiguration()
     .WriteTo.Console(builder.Environment.IsProduction()
-        ? LogEventLevel.Information
+        ? LogEventLevel.Error
         : LogEventLevel.Information)
     .CreateLogger();
 // builder.Services.Configure<ForwardedHeadersOptions>(options =>
@@ -136,11 +136,15 @@ builder.Services
     .AddAuthorization(GithubAuth.CustomPolicy());
 var app = builder.Build();
 
-app.Use((context, next) =>
+if (!app.Environment.IsDevelopment())
 {
-    context.Request.Scheme = "https";
-    return next(context);
-});
+    app.Use((context, next) =>
+    {
+        context.Request.Scheme = "https";
+        return next(context);
+    });
+}
+
 // app.UseForwardedHeaders();
 app.UseAuthentication();
 app.UseAuthorization();
