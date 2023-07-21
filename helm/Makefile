@@ -20,3 +20,5 @@ install:
 
 uninstall:
 	helm -n spot-pricing-dev uninstall spot-pricing-${GITREF}
+	
+reinstall: uninstall install

@@ -47,7 +47,18 @@ spec:
               port: http
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
+          envFrom:
+            - secretRef:
+                name: app-secrets
+          volumeMounts:
+            - mountPath: "/app"
+              name: app-settings
+              readOnly: true
       {{- with .Values.nodeSelector }}
+      volumes:
+        - name: app-settings
+          configMap: 
+            name: app-settings
       nodeSelector:
         {{- toYaml . | nindent 8 }}
       {{- end }}

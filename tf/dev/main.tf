@@ -25,6 +25,7 @@ module lks {
   }
   github-token  = var.GITHUB_TOKEN
   k8s-namespace = "spot-pricing-dev"
+  postgresql-password = var.POSTGRESQL_PASSWORD
 }
 
 module github {

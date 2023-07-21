@@ -28,11 +28,35 @@ resource kubernetes_namespace spot-pricing-dev {
 
 resource kubernetes_secret ghcr-auth {
   metadata {
-    name      = "spot-pricing-ghcr-auth"
+    name      = "ghcr-auth"
     namespace = kubernetes_namespace.spot-pricing-dev.metadata[0].name
   }
   type = "kubernetes.io/dockercfg"
   data = {
     ".dockercfg" = jsonencode(local.ghcrauth)
+  }
+}
+
+resource kubernetes_secret app-secrets {
+  metadata {
+    name      = "app-secrets"
+    namespace = kubernetes_namespace.spot-pricing-dev.metadata[0].name
+  }
+  type = "kubernetes.io/dockercfg"
+  data = {
+    ".dockercfg" = jsonencode(local.ghcrauth)
+    "GITHUB_OAUTH_CLIENT_SECRET"="1de50376cd013cafc5e02e9446fd9b6da5c84a1c",
+    "AWSSECRETKEY"="mfQ4ILmYP0PjV8WNnDpPiUh5ix+lx9zPp/F2mBNG",
+    "POSTGRESQL_PASSWORD"=var.postgresql-password
+  }
+}
+
+resource kubernetes_config_map app-settings {
+  metadata {
+    name      = "app-settings"
+    namespace = kubernetes_namespace.spot-pricing-dev.metadata[0].name
+  }
+  data = {
+    "appsettings.json" = file("../../config/dev/appsettings.json")
   }
 }
