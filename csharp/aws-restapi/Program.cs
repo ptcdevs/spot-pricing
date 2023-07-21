@@ -285,10 +285,10 @@ app.MapGet("parseondemandpricing", async (
     NpgsqlConnectionStringBuilder connectionStringBuilder,
     AwsMultiClient awsMultiClient, CancellationToken cancelToken) =>
 {
-    var unparsedCsvFileIdsSql = await File.ReadAllTextAsync("sql/unparsedCsvFileIds.sql");
+    var unparsedCsvFileIdsSql = await File.ReadAllTextAsync("sql/unparsedCsvFileIds.sql", cancelToken);
     var csvFiles = connection
         .Query<OnDemandCsvFile>(@"select * from  ""OnDemandCsvFiles""")
-        .Take(5)
+        .Take(1)
         ;
     var semaphore = new SemaphoreSlim(1);
     var resultTasks = csvFiles
