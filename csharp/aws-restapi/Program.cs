@@ -243,9 +243,10 @@ app.MapGet("syncondemandpricing", async (
             .QueryAsync<string>(onDemandPriceUrlsFetchedSql, commandTimeout: 300);
 
         var priceFileUrlResponses = await awsMultiClient.GetPriceFileDownloadUrlsAsync(cancelToken);
+        var batchSize = int.Parse(config["spot-pricing:onDemandDownloadBatchSize"] ?? "1");
         var priceUrlsToFetch = priceFileUrlResponses
             .Where(resp => !onDemandPriceUrlsFetched.Contains(resp.Url))
-            .Take(5)
+            .Take(batchSize)
             .ToList();
         var semaphore = new SemaphoreSlim(1);
         var downloads = priceUrlsToFetch
@@ -283,12 +284,14 @@ app.MapGet("syncondemandpricing", async (
 app.MapGet("parseondemandpricing", async (
     NpgsqlConnection connection,
     NpgsqlConnectionStringBuilder connectionStringBuilder,
-    AwsMultiClient awsMultiClient, CancellationToken cancelToken) =>
+    AwsMultiClient awsMultiClient, 
+    CancellationToken cancelToken) =>
 {
     var unparsedCsvFileIdsSql = await File.ReadAllTextAsync("sql/unparsedCsvFile.sql", cancelToken);
+    var batchSize = int.Parse(config["spot-pricing:onDemandParseBatchSize"] ?? "1");
     var csvFiles = connection
         .Query<OnDemandCsvFile>(unparsedCsvFileIdsSql)
-        .Take(2)
+        .Take(batchSize)
         ;
     var semaphore = new SemaphoreSlim(1);
     var resultTasks = csvFiles
