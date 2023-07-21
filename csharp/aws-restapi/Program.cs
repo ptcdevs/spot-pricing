@@ -245,7 +245,7 @@ app.MapGet("syncondemandpricing", async (
         var priceFileUrlResponses = await awsMultiClient.GetPriceFileDownloadUrlsAsync(cancelToken);
         var priceUrlsToFetch = priceFileUrlResponses
             .Where(resp => !onDemandPriceUrlsFetched.Contains(resp.Url))
-            .Take(2)
+            .Take(5)
             .ToList();
         var semaphore = new SemaphoreSlim(1);
         var downloads = priceUrlsToFetch
@@ -288,7 +288,7 @@ app.MapGet("parseondemandpricing", async (
     var unparsedCsvFileIdsSql = await File.ReadAllTextAsync("sql/unparsedCsvFile.sql", cancelToken);
     var csvFiles = connection
         .Query<OnDemandCsvFile>(unparsedCsvFileIdsSql)
-        .Take(5)
+        .Take(2)
         ;
     var semaphore = new SemaphoreSlim(1);
     var resultTasks = csvFiles
