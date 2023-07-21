@@ -426,6 +426,7 @@ public class AwsMultiClient
             recordsCopied += 1;
         }
         await pgPricingBulkCopier.CompleteAsync(cancellationToken);
+
         await readConnection.CloseAsync();
         await writeConnection.CloseAsync();
         

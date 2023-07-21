@@ -288,7 +288,7 @@ app.MapGet("parseondemandpricing", async (
     var unparsedCsvFileIdsSql = await File.ReadAllTextAsync("sql/unparsedCsvFile.sql", cancelToken);
     var csvFiles = connection
         .Query<OnDemandCsvFile>(unparsedCsvFileIdsSql)
-        .Take(1)
+        .Take(5)
         ;
     var semaphore = new SemaphoreSlim(1);
     var resultTasks = csvFiles
