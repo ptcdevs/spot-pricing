@@ -23,7 +23,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Logging.ClearProviders();
 Log.Logger = new LoggerConfiguration()
     .WriteTo.Console(builder.Environment.IsProduction()
-        ? LogEventLevel.Error
+        ? LogEventLevel.Information
         : LogEventLevel.Information)
     .CreateLogger();
 builder.Logging.AddSerilog(Log.Logger);
