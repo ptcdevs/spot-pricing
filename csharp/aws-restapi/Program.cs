@@ -145,6 +145,8 @@ app.UseSwaggerUI(options =>
 });
 app.MapGet("/", () => "Hello World!")
     .RequireAuthorization("ValidGithubUser");
+//TODO: confirm service authentication for health check
+app.MapGet("/health", () => "healthy");
 app.MapGet("login", () => "authorized")
     .RequireAuthorization("ValidGithubUser");
 app.MapGet("unauthorized", Results.Unauthorized);
