@@ -35,7 +35,14 @@ builder.Services
         options.DefaultSignInScheme = CookieAuthenticationDefaults.AuthenticationScheme;
         options.DefaultChallengeScheme = "GitHub";
     })
-    .AddCookie(cookieOptions => { cookieOptions.AccessDeniedPath = "/unauthorized"; })
+    .AddCookie(cookieOptions =>
+    {
+        cookieOptions.AccessDeniedPath = "/unauthorized";
+        cookieOptions.CookieManager = new ChunkingCookieManager();
+        cookieOptions.Cookie.HttpOnly = true;
+        cookieOptions.Cookie.SameSite = SameSiteMode.None;
+        cookieOptions.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+    })
     .AddGitHub(authOptions =>
     {
         authOptions.ClientId = config["GithubOauth:ClientId"];

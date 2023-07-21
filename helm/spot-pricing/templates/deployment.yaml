@@ -51,14 +51,15 @@ spec:
             - secretRef:
                 name: app-secrets
           volumeMounts:
-            - mountPath: "/app"
-              name: app-settings
+            - name: app-settings
+              mountPath: "/app/appsettings.json"
               readOnly: true
-      {{- with .Values.nodeSelector }}
+              subPath: "appsettings.json"
       volumes:
         - name: app-settings
-          configMap: 
+          configMap:
             name: app-settings
+      {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
       {{- end }}
