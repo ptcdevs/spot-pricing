@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Web;
 using Amazon;
 using Amazon.EC2.Model;
 using Amazon.Pricing;
@@ -57,10 +58,32 @@ builder.Services
         {
             Log.Information("test");
             //TODO: fix proxied http scheme and make https
+            var xForwardedHost = context.Request.Headers["X-Forwarded-Host"].ToString();
+            var xForwardedProto = context.Request.Headers["X-Forwarded-Proto"].ToString();
+            var redirectUrl = new Uri(context.RedirectUri);
+            var query = HttpUtility.ParseQueryString(redirectUrl.Query);
+            var oauthRedirect = new Uri(query["redirect_uri"]);
+            var newOauthRedirect = new UriBuilder(oauthRedirect)
+            {
+                Scheme = xForwardedProto.Equals("")
+                    ? oauthRedirect.Scheme
+                    : xForwardedProto,
+                Host = xForwardedHost.Equals("")
+                    ? oauthRedirect.Host
+                    : xForwardedHost,
+            }.ToString();
+            var newQuery = query
+                .GetEnumerator();
+            
             var headers = context.Request.Headers
                 .Select(h => $"{h.Key.ToString()}: {h.Value.ToString()} ")
                 .OrderBy(h => h)
                 .ToList();
+            // X-Forwarded-For: 139.144.30.218
+            // X-Forwarded-Host: spot-pricing.dev.xounges.net
+            // X-Forwarded-Port: 443
+            // X-Forwarded-Proto: https
+            // X-Forwarded-Scheme: https
             Log.Information("headers: {Headers}", string.Join("\n", headers));
             context.Response.Redirect(context.RedirectUri);
             return Task.CompletedTask;
