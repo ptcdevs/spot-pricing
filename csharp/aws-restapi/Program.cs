@@ -206,6 +206,11 @@ builder.Services
     .AddAuthorization(GithubAuth.CustomPolicy());
 var app = builder.Build();
 
+app.Use((context, next) =>
+{
+    context.Request.Scheme = "https";
+    return next(context);
+});
 app.UseForwardedHeaders();
 app.UseAuthentication();
 app.UseAuthorization();
