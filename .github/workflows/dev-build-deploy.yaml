@@ -95,7 +95,7 @@ jobs:
         run: |
           helm -n spot-pricing-dev install spot-pricing ./spot-pricing \
             --set image.tag=${TAG} \
-            --set .image.pullPolicy=Always \ 
+            --set image.pullPolicy=Always \ 
             --wait >> $GITHUB_STEP_SUMMARY
         working-directory: helm
         env:

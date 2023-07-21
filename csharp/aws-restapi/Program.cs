@@ -138,7 +138,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.UseForwardedHeaders(new ForwardedHeadersOptions
 {
-    ForwardedHeaders = ForwardedHeaders.XForwardedProto
+    ForwardedHeaders = ForwardedHeaders.All
 });
 
 app.UseSwagger();
@@ -150,6 +150,12 @@ app.MapGet("/", () => "Hello World!")
     .RequireAuthorization("ValidGithubUser");
 app.MapGet("login", () => "authorized")
     .RequireAuthorization("ValidGithubUser");
+// app.MapGet("loginders", () =>
+//     {
+//         var headers = 
+//         return "authorized";
+//     })
+//     .RequireAuthorization("ValidGithubUser");
 app.MapGet("unauthorized", Results.Unauthorized);
 app.MapGet("syncgpuspotpricing", async (NpgsqlConnection connection, AwsMultiClient awsMultiClient) =>
     {
