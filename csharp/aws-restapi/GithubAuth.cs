@@ -73,7 +73,7 @@ public abstract class GithubAuth
         }
     }
 
-    public Func<RedirectContext<OAuthOptions>, Task> GithubFixer = context =>
+    public static Func<RedirectContext<OAuthOptions>, Task> GithubFixer = context =>
     {
         var redirectUrl = new Uri(context.RedirectUri);
         if (redirectUrl.Host.Equals("github.com"))
