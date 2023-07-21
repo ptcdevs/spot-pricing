@@ -292,7 +292,7 @@ app.MapGet("parseondemandpricing", async (
     var csvFiles = connection
         .Query<OnDemandCsvFile>(unparsedCsvFileIdsSql)
         .Take(batchSize)
-        ;
+        .ToList();
     var semaphore = new SemaphoreSlim(1);
     var resultTasks = csvFiles
         .Select(async csvFile =>
