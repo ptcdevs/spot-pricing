@@ -42,12 +42,11 @@ resource kubernetes_secret app-secrets {
     name      = "app-secrets"
     namespace = kubernetes_namespace.spot-pricing-dev.metadata[0].name
   }
-  type = "kubernetes.io/dockercfg"
+  type = "Opaque"
   data = {
-    ".dockercfg" = jsonencode(local.ghcrauth)
-    "GITHUB_OAUTH_CLIENT_SECRET"="1de50376cd013cafc5e02e9446fd9b6da5c84a1c",
-    "AWSSECRETKEY"="mfQ4ILmYP0PjV8WNnDpPiUh5ix+lx9zPp/F2mBNG",
-    "POSTGRESQL_PASSWORD"=var.postgresql-password
+    GITHUB_OAUTH_CLIENT_SECRET = var.github-oauth-client-secret
+    AWSSECRETKEY               = var.aws-secret-key
+    POSTGRESQL_PASSWORD        = var.postgresql-password
   }
 }
 
