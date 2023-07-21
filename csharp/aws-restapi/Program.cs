@@ -1,17 +1,11 @@
-using System.Collections.Specialized;
 using System.Diagnostics;
-using System.Web;
 using Amazon;
 using Amazon.EC2.Model;
-using Amazon.Pricing;
 using Amazon.Runtime;
 using aws_restapi;
 using aws_restapi.services;
 using Dapper;
-using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
-using Microsoft.AspNetCore.Authentication.OAuth;
-using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.OpenApi.Models;
 using Npgsql;
 using Serilog;
@@ -26,24 +20,19 @@ var config = new ConfigurationBuilder()
     .AddEnvironmentVariables()
     .Build();
 var builder = WebApplication.CreateBuilder(args);
+builder.Logging.ClearProviders();
 Log.Logger = new LoggerConfiguration()
     .WriteTo.Console(builder.Environment.IsProduction()
         ? LogEventLevel.Error
         : LogEventLevel.Information)
     .CreateLogger();
-// builder.Services.Configure<ForwardedHeadersOptions>(options =>
-// {
-//     options.ForwardedHeaders =
-//         ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
-// });
+builder.Logging.AddSerilog(Log.Logger);
 
 //authentication
 builder.Services
     .AddAuthentication(options =>
     {
-        // options.DefaultAuthenticateScheme = CookieAuthenticationDefaults.AuthenticationScheme;
         options.DefaultScheme = CookieAuthenticationDefaults.AuthenticationScheme;
-        // options.DefaultSignInScheme = CookieAuthenticationDefaults.AuthenticationScheme;
         options.DefaultChallengeScheme = "GitHub";
     })
     .AddCookie()
@@ -158,12 +147,6 @@ app.MapGet("/", () => "Hello World!")
     .RequireAuthorization("ValidGithubUser");
 app.MapGet("login", () => "authorized")
     .RequireAuthorization("ValidGithubUser");
-// app.MapGet("loginders", () =>
-//     {
-//         var headers = 
-//         return "authorized";
-//     })
-//     .RequireAuthorization("ValidGithubUser");
 app.MapGet("unauthorized", Results.Unauthorized);
 app.MapGet("syncgpuspotpricing", async (NpgsqlConnection connection, AwsMultiClient awsMultiClient) =>
     {
