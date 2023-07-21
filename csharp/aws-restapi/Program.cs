@@ -1,3 +1,4 @@
+using System.Collections.Specialized;
 using System.Diagnostics;
 using System.Web;
 using Amazon;
@@ -54,37 +55,65 @@ builder.Services
         authOptions.ClientSecret = config["GITHUB_OAUTH_CLIENT_SECRET"];
         authOptions.CallbackPath = "/callback";
         authOptions.Scope.Add("user:email");
+        authOptions.Events.OnCreatingTicket = context =>
+        {
+
+            return Task.CompletedTask;
+        };
         authOptions.Events.OnRedirectToAuthorizationEndpoint = context =>
         {
-            Log.Information("test");
-            //TODO: fix proxied http scheme and make https
-            var xForwardedHost = context.Request.Headers["X-Forwarded-Host"].ToString();
-            var xForwardedProto = context.Request.Headers["X-Forwarded-Proto"].ToString();
             var redirectUrl = new Uri(context.RedirectUri);
-            var query = HttpUtility.ParseQueryString(redirectUrl.Query);
-            var oauthRedirect = new Uri(query["redirect_uri"]);
-            var newOauthRedirect = new UriBuilder(oauthRedirect)
+            if (redirectUrl.Host.Equals("github.com"))
             {
-                Scheme = xForwardedProto.Equals("")
-                    ? oauthRedirect.Scheme
-                    : xForwardedProto,
-                Host = xForwardedHost.Equals("")
-                    ? oauthRedirect.Host
-                    : xForwardedHost,
-            }.ToString();
-            var newQuery = query
-                .GetEnumerator();
-            
-            var headers = context.Request.Headers
-                .Select(h => $"{h.Key.ToString()}: {h.Value.ToString()} ")
-                .OrderBy(h => h)
-                .ToList();
-            // X-Forwarded-For: 139.144.30.218
-            // X-Forwarded-Host: spot-pricing.dev.xounges.net
-            // X-Forwarded-Port: 443
-            // X-Forwarded-Proto: https
-            // X-Forwarded-Scheme: https
-            Log.Information("headers: {Headers}", string.Join("\n", headers));
+                Log.Information("test");
+                //TODO: fix proxied http scheme and make https
+                var xForwardedHost = context.Request.Headers["X-Forwarded-Host"].ToString();
+                var xForwardedProto = context.Request.Headers["X-Forwarded-Proto"].ToString();
+                var query = HttpUtility.ParseQueryString(redirectUrl.Query);
+                var oauthRedirect = new Uri(query["redirect_uri"]);
+                var newOauthRedirect = new UriBuilder(oauthRedirect)
+                {
+                    Scheme = xForwardedProto.Equals("")
+                        ? oauthRedirect.Scheme
+                        : xForwardedProto,
+                    Host = xForwardedHost.Equals("")
+                        ? oauthRedirect.Host
+                        : xForwardedHost,
+                };
+                var newQuery = query
+                    .AllKeys
+                    .Select(k =>
+                    {
+                        // var keyValue = k[0].Equals("redirect_uri")
+                        //     ? new[] { "redirect_uri", newOauthRedirect }
+                        //     : new[] { k, query[k] };
+                        var param = k[0].Equals("redirect_uri")
+                            ? $"redirect_uri={HttpUtility.UrlEncode(newOauthRedirect.ToString())}"
+                            : $"{k}={query[k]}";
+                        return param;
+                    });
+                var newRedirectUrl = new UriBuilder(redirectUrl)
+                {
+                    Query = string.Join("&", newQuery)
+                };
+
+                // var headers = context.Request.Headers
+                //     .Select(h => $"{h.Key.ToString()}: {h.Value.ToString()} ")
+                //     .OrderBy(h => h)
+                //     .ToList();
+                // X-Forwarded-For: 139.144.30.218
+                // X-Forwarded-Host: spot-pricing.dev.xounges.net
+                // X-Forwarded-Port: 443
+                // X-Forwarded-Proto: https
+                // X-Forwarded-Scheme: https
+                // Log.Information("headers: {Headers}", string.Join("\n", headers));
+                Log.Information("oldRedirectUrl: {OldRedirectUrl}", redirectUrl);
+                Log.Information("oldOauthRedirectUrl: {OldOauthRedirectUrl}", oauthRedirect);
+                Log.Information("newRedirectUrl: {NewRedirectUrl}", newRedirectUrl);
+                Log.Information("newOauthRedirectUrl: {NewRedirectUrl}", newOauthRedirect);
+                context.RedirectUri = newRedirectUrl.ToString();
+            }
+
             context.Response.Redirect(context.RedirectUri);
             return Task.CompletedTask;
         };
