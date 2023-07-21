@@ -26,7 +26,7 @@ module lks {
   github-token               = var.GITHUB_TOKEN
   k8s-namespace              = "spot-pricing-dev"
   postgresql-password        = var.POSTGRESQL_PASSWORD
-  aws-secret-key             = var.AWS_SECRET_ACCESS_KEY
+  aws-secret-key             = var.AWSSECRETKEY
   github-oauth-client-secret = var.GITHUB_OAUTH_CLIENT_SECRET
 }
 

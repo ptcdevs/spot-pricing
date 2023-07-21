@@ -29,6 +29,8 @@ public class AwsMultiClient
 
     public AwsMultiClient(IEnumerable<RegionEndpoint> regionEndpoints, BasicAWSCredentials credentials)
     {
+        Log.Information($"aws accesskey: {credentials.GetCredentials().AccessKey}");
+        Log.Information($"aws secretkey: {credentials.GetCredentials().SecretKey}");
         RegionEndpoints = regionEndpoints;
         Credentials = credentials;
         RegionalEc2Clients = RegionEndpoints
