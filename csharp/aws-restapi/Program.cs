@@ -134,12 +134,12 @@ builder.Services
     .AddAuthorization(GithubAuth.CustomPolicy());
 var app = builder.Build();
 
-app.UseAuthentication();
-app.UseAuthorization();
 app.UseForwardedHeaders(new ForwardedHeadersOptions
 {
     ForwardedHeaders = ForwardedHeaders.All
 });
+app.UseAuthentication();
+app.UseAuthorization();
 
 app.UseSwagger();
 app.UseSwaggerUI(options =>
