@@ -58,7 +58,7 @@ builder.Services
             Log.Information("test");
             //TODO: fix proxied http scheme and make https
             var headers = context.Request.Headers
-                .Select(h => h.Key.ToString())
+                .Select(h => $"{h.Key.ToString()}: {h.Value.ToString()} ")
                 .OrderBy(h => h)
                 .ToList();
             Log.Information("headers: {Headers}", string.Join("\n", headers));
