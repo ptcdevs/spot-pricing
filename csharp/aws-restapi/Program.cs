@@ -7,6 +7,7 @@ using aws_restapi;
 using aws_restapi.services;
 using Dapper;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.OpenApi.Models;
 using Npgsql;
 using Serilog;
@@ -31,17 +32,18 @@ Log.Logger = new LoggerConfiguration()
 builder.Services
     .AddAuthentication(options =>
     {
-        options.DefaultAuthenticateScheme = CookieAuthenticationDefaults.AuthenticationScheme;
-        options.DefaultSignInScheme = CookieAuthenticationDefaults.AuthenticationScheme;
+        // options.DefaultAuthenticateScheme = CookieAuthenticationDefaults.AuthenticationScheme;
+        options.DefaultScheme = CookieAuthenticationDefaults.AuthenticationScheme;
+        // options.DefaultSignInScheme = CookieAuthenticationDefaults.AuthenticationScheme;
         options.DefaultChallengeScheme = "GitHub";
     })
     .AddCookie(cookieOptions =>
     {
-        cookieOptions.AccessDeniedPath = "/unauthorized";
+        // cookieOptions.AccessDeniedPath = "/unauthorized";
         cookieOptions.CookieManager = new ChunkingCookieManager();
         cookieOptions.Cookie.HttpOnly = true;
         cookieOptions.Cookie.SameSite = SameSiteMode.None;
-        cookieOptions.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+        cookieOptions.Cookie.SecurePolicy = CookieSecurePolicy.None;
     })
     .AddGitHub(authOptions =>
     {
@@ -134,13 +136,18 @@ var app = builder.Build();
 
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseForwardedHeaders(new ForwardedHeadersOptions
+{
+    ForwardedHeaders = ForwardedHeaders.XForwardedProto
+});
 
 app.UseSwagger();
 app.UseSwaggerUI(options =>
 {
     options.SwaggerEndpoint("/swagger/v1/swagger.json", $"{builder.Environment.ApplicationName} v1");
 });
-app.MapGet("/", () => "Hello World!");
+app.MapGet("/", () => "Hello World!")
+    .RequireAuthorization("ValidGithubUser");
 app.MapGet("login", () => "authorized")
     .RequireAuthorization("ValidGithubUser");
 app.MapGet("unauthorized", Results.Unauthorized);
