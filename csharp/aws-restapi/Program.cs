@@ -23,7 +23,7 @@ var config = new ConfigurationBuilder()
 var builder = WebApplication.CreateBuilder(args);
 Log.Logger = new LoggerConfiguration()
     .WriteTo.Console(builder.Environment.IsProduction()
-        ? LogEventLevel.Error
+        ? LogEventLevel.Information
         : LogEventLevel.Information)
     .CreateLogger();
 
