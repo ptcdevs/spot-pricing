@@ -6,7 +6,9 @@ using Amazon.Runtime;
 using aws_restapi;
 using aws_restapi.services;
 using Dapper;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authentication.OAuth;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.OpenApi.Models;
 using Npgsql;
@@ -51,6 +53,18 @@ builder.Services
         authOptions.ClientSecret = config["GITHUB_OAUTH_CLIENT_SECRET"];
         authOptions.CallbackPath = "/callback";
         authOptions.Scope.Add("user:email");
+        authOptions.Events.OnRedirectToAuthorizationEndpoint = context =>
+        {
+            Log.Information("test");
+            //TODO: fix proxied http scheme and make https
+            var headers = context.Request.Headers
+                .Select(h => h.Key.ToString())
+                .OrderBy(h => h)
+                .ToList();
+            Log.Information("headers: {Headers}", string.Join("\n", headers));
+            context.Response.Redirect(context.RedirectUri);
+            return Task.CompletedTask;
+        };
     });
 
 //swagger gen + ui config
