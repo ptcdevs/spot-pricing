@@ -239,8 +239,8 @@ app.MapGet("syncgpuspotpricing", async (NpgsqlConnection connection, AwsMultiCli
 app.MapGet("syncondemandpricing", async (
         NpgsqlConnectionStringBuilder connectionStringBuilder,
         NpgsqlConnection connection,
-        AwsMultiClient awsMultiClient
-        , CancellationToken cancelToken) =>
+        AwsMultiClient awsMultiClient,
+        CancellationToken cancelToken) =>
     {
         var onDemandPriceUrlsFetchedSql = File.ReadAllText("sql/onDemandPriceUrlsFetched.sql");
         var onDemandPriceUrlsFetched = await connection
@@ -288,7 +288,8 @@ app.MapGet("syncondemandpricing", async (
 app.MapGet("parseondemandpricing", async (
     NpgsqlConnection connection,
     NpgsqlConnectionStringBuilder connectionStringBuilder,
-    AwsMultiClient awsMultiClient) =>
+    AwsMultiClient awsMultiClient,
+    CancellationToken cancelToken) =>
 {
     var unparsedCsvFileIdsSql = await File.ReadAllTextAsync("sql/unparsedCsvFile.sql");
     var batchSize = int.Parse(config["spot-pricing:onDemandParseBatchSize"] ?? "1");
@@ -305,7 +306,7 @@ app.MapGet("parseondemandpricing", async (
             {
                 await semaphore.WaitAsync();
                 Log.Information("parsing csv file id ({csvFileId}) from url: {csvFileUrl}", csvFile.Id, csvFile.Url);
-                return await awsMultiClient.ParseOnDemandPricingAsync(csvFile.Id, connectionStringBuilder);
+                return await awsMultiClient.ParseOnDemandPricingAsync(csvFile.Id, connectionStringBuilder, cancelToken);
             }
             catch (Exception ex)
             {
@@ -316,7 +317,8 @@ app.MapGet("parseondemandpricing", async (
             {
                 semaphore.Release();
             }
-        });
+        })
+        .ToList();
 
     var results = await Task.WhenAll(resultTasks);
     return new
