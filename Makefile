@@ -44,6 +44,14 @@ ghcr-login:
 docker-build:
 	docker buildx build -t ghcr.io/ptcdevs/spot-pricing:${GITREF} .
 
+docker-push:
+	docker push ghcr.io/ptcdevs/spot-pricing:${GITREF}
+
+redeploy: docker-build docker-push
+	cd helm; \
+		make reinstall
+	
+
 echo:
 	echo "GITREF: ${GITREF}"
 	#ghcr.io/ptcdevs/spot-pricing:${{ needs.set-refs.outputs.branch }}

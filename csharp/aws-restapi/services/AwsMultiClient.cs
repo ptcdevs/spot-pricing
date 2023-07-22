@@ -394,21 +394,21 @@ public class AwsMultiClient
     }
 
     public async Task<ParseOnDemandPricingResult> ParseOnDemandPricingAsync(long csvFileId,
-        NpgsqlConnectionStringBuilder connectionStringBuilder,
+        NpgsqlConnection readConnection,
+        NpgsqlConnection writeConnection,
         CancellationToken cancellationToken = default(CancellationToken))
     {
         var stopWatch = new Stopwatch();
         stopWatch.Start();
-        await using var readConnection = new NpgsqlConnection(connectionStringBuilder.ToString());
-        await using var writeConnection = new NpgsqlConnection(connectionStringBuilder.ToString());
-        await readConnection.OpenAsync(cancellationToken);
-        await writeConnection.OpenAsync(cancellationToken);
         var createCsvFileTempTableSql =
             await File.ReadAllTextAsync("sql/createCsvFileTempTable.sql", cancellationToken);
-        var tempTablePrepResult = await readConnection
-            .ExecuteAsync(createCsvFileTempTableSql, new { Id = csvFileId }, commandTimeout: 600);
+        var tempTable = $"csvFile{DateTimeOffset.Now.ToUnixTimeMilliseconds()}";
+        var tempTablePrepResult = readConnection.Execute(
+            createCsvFileTempTableSql, 
+            new { Id = csvFileId }, 
+            commandTimeout: 600);
         var pgCsvTextReader = await readConnection
-            .BeginTextExportAsync("copy csvFile (line) TO STDOUT (FORMAT TEXT)", cancellationToken);
+            .BeginTextExportAsync($"copy {tempTable} (line) TO STDOUT (FORMAT TEXT)", cancellationToken);
         var createdAt = DateTimeOffset.Now;
         var bulkCopySql = await File.ReadAllTextAsync("sql/onDemandPricingBulkCopy.sql", cancellationToken);
         var pgPricingBulkCopier = await writeConnection.BeginBinaryImportAsync(bulkCopySql, cancellationToken);
@@ -422,16 +422,31 @@ public class AwsMultiClient
             var recordDictionary = ((IEnumerable<KeyValuePair<string, object>>)record)
                 .ToDictionary(kv => kv.Key, kv => kv.Value);
             var onDemandPrice = OnDemandPrice.Convert(recordDictionary);
-            await OnDemandPrice.BulkCopy(pgPricingBulkCopier, createdAt, onDemandPrice, cancellationToken);
+            try
+            {
+                await OnDemandPrice.BulkCopy(pgPricingBulkCopier, createdAt, onDemandPrice, cancellationToken);
+            }
+            catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+            {
+                Log.Error(ex, "timeout error processing onDemandPrice.OnDemandCsvRowsId {OnDemandCsvRowId}", onDemandPrice?.OnDemandCsvRowsId.ToString() ?? "NULL");
+                Log.Error(ex, "timeout error processing onDemandPrice {@OnDemandPrice}", onDemandPrice);
+            }
+            catch (TaskCanceledException ex)
+            {
+                Log.Error(ex, "non-timeout error processing onDemandPrice.OnDemandCsvRowsId {OnDemandCsvRowId}", onDemandPrice?.OnDemandCsvRowsId.ToString() ?? "NULL");
+                Log.Error(ex, "non-timeout error processing onDemandPrice {@OnDemandPrice}", onDemandPrice);
+                Log.Error(ex.InnerException, "inner message: {InnerExceptionMessage}", ex.InnerException?.Message ?? "NULL");
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "error processing onDemandPrice.OnDemandCsvRowsId {OnDemandCsvRowId}", onDemandPrice?.OnDemandCsvRowsId.ToString() ?? "NULL");
+                Log.Error(ex, "error processing onDemandPrice {@OnDemandPrice}", onDemandPrice);
+                Log.Error(ex.InnerException, "inner message: {InnerExceptionMessage}", ex.InnerException?.Message ?? "NULL");
+            }
             recordsCopied += 1;
         }
+        pgPricingBulkCopier.Complete();
 
-        await pgPricingBulkCopier.CompleteAsync(cancellationToken);
-        pgCsvTextReader.Close();
-
-        await readConnection.CloseAsync();
-        await writeConnection.CloseAsync();
-        
         Log.Information("{recordsCopied} records copied", recordsCopied);
 
         stopWatch.Stop();
