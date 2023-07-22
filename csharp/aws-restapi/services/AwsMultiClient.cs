@@ -425,7 +425,9 @@ public class AwsMultiClient
             await OnDemandPrice.BulkCopy(pgPricingBulkCopier, createdAt, onDemandPrice, cancellationToken);
             recordsCopied += 1;
         }
+
         await pgPricingBulkCopier.CompleteAsync(cancellationToken);
+        pgCsvTextReader.Close();
 
         await readConnection.CloseAsync();
         await writeConnection.CloseAsync();
