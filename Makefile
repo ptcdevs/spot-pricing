@@ -1,5 +1,7 @@
 #!make
 
+GITREF=`git rev-parse --abbrev-ref HEAD |  sed -e 's/\(.*\)/\L\1/'`
+
 params/regions.json:
 	aws ec2 describe-regions --region us-east-1 --all-regions --no-cli-pager > params/regions.json
 
@@ -35,3 +37,11 @@ pricing-describe-services:
 
 docker-compose-up:
 	docker-compose up 
+	
+ghcr-login:
+	docker login ghcr.io --username vector623 --password ${GITHUB_TOKEN}
+
+docker-build:
+echo:
+	echo "GITREF: ${GITREF}"
+	#ghcr.io/ptcdevs/spot-pricing:${{ needs.set-refs.outputs.branch }}

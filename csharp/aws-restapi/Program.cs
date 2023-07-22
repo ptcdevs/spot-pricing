@@ -288,12 +288,13 @@ app.MapGet("syncondemandpricing", async (
 app.MapGet("parseondemandpricing", async (
     NpgsqlConnection connection,
     NpgsqlConnectionStringBuilder connectionStringBuilder,
-    AwsMultiClient awsMultiClient,
-    CancellationToken cancelToken) =>
+    AwsMultiClient awsMultiClient
+    ,CancellationToken cancelToken
+    ) =>
 {
     var unparsedCsvFileIdsSql = await File.ReadAllTextAsync("sql/unparsedCsvFile.sql");
     var batchSize = int.Parse(config["spot-pricing:onDemandParseBatchSize"] ?? "1");
-    var csvFiles = (await connection.QueryAsync<OnDemandCsvFile>(unparsedCsvFileIdsSql))
+    var csvFiles = (await connection.QueryAsync<OnDemandCsvFile>(unparsedCsvFileIdsSql, commandTimeout: 300))
         .Take(batchSize)
         .ToList();
     Log.Information($"batchsize: {batchSize}");
