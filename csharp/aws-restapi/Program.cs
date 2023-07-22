@@ -311,7 +311,7 @@ app.MapGet("parseondemandpricing", async (
             }
             catch (Exception ex)
             {
-                Log.Error("error parsing csv file id ({csvFileId}) from url: {csvFileUrl}", csvFile.Id, csvFile.Url);
+                Log.Error(ex, "error parsing csv file id ({csvFileId}) from url: {csvFileUrl}", csvFile.Id, csvFile.Url);
                 throw ex;
             }
             finally

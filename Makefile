@@ -42,6 +42,8 @@ ghcr-login:
 	docker login ghcr.io --username vector623 --password ${GITHUB_TOKEN}
 
 docker-build:
+	docker buildx build -t ghcr.io/ptcdevs/spot-pricing:${GITREF} .
+
 echo:
 	echo "GITREF: ${GITREF}"
 	#ghcr.io/ptcdevs/spot-pricing:${{ needs.set-refs.outputs.branch }}
