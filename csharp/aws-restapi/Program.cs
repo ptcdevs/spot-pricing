@@ -6,6 +6,7 @@ using aws_restapi;
 using aws_restapi.services;
 using Dapper;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.OpenApi.Models;
 using Npgsql;
 using Serilog;
@@ -143,7 +144,10 @@ app.UseSwaggerUI(options =>
 {
     options.SwaggerEndpoint("/swagger/v1/swagger.json", $"{builder.Environment.ApplicationName} v1");
 });
-app.MapGet("/", () => "Hello World!")
+app.MapGet("/", () =>
+    {
+        return Results.Redirect("/swagger");
+    })
     .RequireAuthorization("ValidGithubUser");
 //TODO: confirm service authentication for health check
 app.MapGet("/health", () => "healthy");
@@ -272,7 +276,7 @@ app.MapGet("syncondemandpricing", async (
             .ToList();
 
         var downloadPriceFileResults = await Task.WhenAll(downloads);
-        
+
         return new
         {
             priceUrlsToFetch,
@@ -284,10 +288,9 @@ app.MapGet("syncondemandpricing", async (
 app.MapGet("parseondemandpricing", async (
     NpgsqlConnection connection,
     NpgsqlConnectionStringBuilder connectionStringBuilder,
-    AwsMultiClient awsMultiClient, 
-    CancellationToken cancelToken) =>
+    AwsMultiClient awsMultiClient) =>
 {
-    var unparsedCsvFileIdsSql = await File.ReadAllTextAsync("sql/unparsedCsvFile.sql", cancelToken);
+    var unparsedCsvFileIdsSql = await File.ReadAllTextAsync("sql/unparsedCsvFile.sql");
     var batchSize = int.Parse(config["spot-pricing:onDemandParseBatchSize"] ?? "1");
     var csvFiles = (await connection.QueryAsync<OnDemandCsvFile>(unparsedCsvFileIdsSql))
         .Take(batchSize)
@@ -300,7 +303,7 @@ app.MapGet("parseondemandpricing", async (
             {
                 await semaphore.WaitAsync();
                 Log.Information("parsing csv file id ({csvFileId}) from url: {csvFileUrl}", csvFile.Id, csvFile.Url);
-                return await awsMultiClient.ParseOnDemandPricingAsync(csvFile.Id, connectionStringBuilder, cancelToken);
+                return await awsMultiClient.ParseOnDemandPricingAsync(csvFile.Id, connectionStringBuilder);
             }
             catch (Exception ex)
             {
