@@ -1,5 +1,7 @@
 # Spot pricing
 
+todo: remove canceltoke from parser
+
 data project to query spot prices for AWS and Azure, for market research purposes
 
 ## Api references
