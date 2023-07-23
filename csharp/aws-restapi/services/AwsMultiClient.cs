@@ -400,23 +400,23 @@ public class AwsMultiClient
     {
         var stopWatch = new Stopwatch();
         stopWatch.Start();
-        using (var readConnection = new NpgsqlConnection(connectionStringBuilder.ToString()))
-        using (var writeConnection = new NpgsqlConnection(connectionStringBuilder.ToString()))
+        await using (var readConnection = new NpgsqlConnection(connectionStringBuilder.ToString()))
+        await using (var writeConnection = new NpgsqlConnection(connectionStringBuilder.ToString()))
         {
-            readConnection.Open();
-            writeConnection.Open();
+            await readConnection.OpenAsync(cancellationToken);
+            await writeConnection.OpenAsync(cancellationToken);
             Log.Information("parsing csv file id: {CsvFileId}", csvFileId);
             var createCsvFileTempTableSql =
                 await File.ReadAllTextAsync("sql/createCsvFileTempTable.sql", cancellationToken);
-            var tempTablePrepResult = readConnection.Execute(
+            var tempTablePrepResult = await readConnection.ExecuteAsync(
                 createCsvFileTempTableSql,
                 new { Id = csvFileId },
                 commandTimeout: 600);
-            var pgCsvTextReader = readConnection
-                .BeginTextExport($"copy csvFile (line) TO STDOUT (FORMAT TEXT)");
+            var pgCsvTextReader = await readConnection
+                .BeginTextExportAsync($"copy csvFile (line) TO STDOUT (FORMAT TEXT)", cancellationToken);
             var createdAt = DateTimeOffset.Now;
             var bulkCopySql = await File.ReadAllTextAsync("sql/onDemandPricingBulkCopy.sql", cancellationToken);
-            var pgPricingBulkCopier = writeConnection.BeginBinaryImport(bulkCopySql);
+            var pgPricingBulkCopier = await writeConnection.BeginBinaryImportAsync(bulkCopySql, cancellationToken);
             int recordsCopied = 0;
             using var csv = new CsvReader(pgCsvTextReader, CultureInfo.InvariantCulture);
             var records = csv.GetRecords<dynamic>();
@@ -429,7 +429,7 @@ public class AwsMultiClient
                 var onDemandPrice = OnDemandPrice.Convert(recordDictionary);
                 try
                 {
-                    OnDemandPrice.BulkCopy(pgPricingBulkCopier, createdAt, onDemandPrice);
+                    await OnDemandPrice.BulkCopy(pgPricingBulkCopier, createdAt, onDemandPrice, cancellationToken);
                 }
                 catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
                 {
@@ -458,13 +458,13 @@ public class AwsMultiClient
             }
 
             pgCsvTextReader.Close();
-            pgPricingBulkCopier.Complete();
-            pgPricingBulkCopier.Close();
-            readConnection.Execute("truncate csvFile");
-            readConnection.Execute("drop table csvFile");
-            writeConnection.Close();
-            readConnection.Close();
-            writeConnection.Close();
+            await pgPricingBulkCopier.CompleteAsync(cancellationToken);
+            await pgPricingBulkCopier.CloseAsync(cancellationToken);
+            await readConnection.ExecuteAsync("truncate csvFile");
+            await readConnection.ExecuteAsync("drop table csvFile");
+            await writeConnection.CloseAsync();
+            await readConnection.CloseAsync();
+            await writeConnection.CloseAsync();
             Log.Information("{recordsCopied} records copied", recordsCopied);
 
             stopWatch.Stop();

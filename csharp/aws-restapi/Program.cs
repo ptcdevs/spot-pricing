@@ -314,6 +314,7 @@ app.MapGet("parseondemandpricing", async (
                             connectionStringBuilder,
                             csv.Id,
                             cancelToken);
+                        return result;
                     }
                     finally
                     {
@@ -324,7 +325,5 @@ app.MapGet("parseondemandpricing", async (
         });
 
         return "success";
-    })
-// .RequireAuthorization("ValidGithubUser")
-    ;
+    }).RequireAuthorization("ValidGithubUser");
 app.Run();
