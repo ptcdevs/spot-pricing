@@ -125,6 +125,9 @@ builder.Services.AddScoped<AwsMultiClient>(provider =>
             config["AWSSECRETKEY"]));
 });
 
+builder.Services.AddHostedService<LongRunningService>();
+builder.Services.AddSingleton<BackgroundWorkerQueue>();
+
 #endregion config
 
 builder.Services
@@ -285,29 +288,43 @@ app.MapGet("syncondemandpricing", async (
     .RequireAuthorization("ValidGithubUser");
 
 app.MapGet("parseondemandpricing", async (
-    NpgsqlConnection connection,
-    NpgsqlConnectionStringBuilder connectionStringBuilder,
-    AwsMultiClient awsMultiClient
-    , CancellationToken cancelToken
-) =>
-{
-    var unparsedCsvFileIdsSql = await File.ReadAllTextAsync("sql/unparsedCsvFile.sql");
-    var batchSize = int.Parse(config["spot-pricing:onDemandParseBatchSize"] ?? "1");
-    var csvFiles = (await connection.QueryAsync<OnDemandCsvFile>(unparsedCsvFileIdsSql, commandTimeout: 300))
-        .Take(batchSize)
-        .ToList();
-    var csvFilesIds = csvFiles.Select(csv => csv.Id);
-    Log.Information("batchsize: {BatchSize}", batchSize);
-    Log.Information("csvFile count: {CsvFilesCount}", csvFiles.Count);
-    var results = await awsMultiClient.ParseOnDemandPricingAsync(
-        connectionStringBuilder,
-        csvFilesIds,
-        cancelToken);
-
-    return Results.Json(new
+        NpgsqlConnectionStringBuilder connectionStringBuilder,
+        AwsMultiClient awsMultiClient,
+        BackgroundWorkerQueue backgroundWorkerQueue,
+        CancellationToken cancelToken) =>
     {
-        results
-    });
-}).RequireAuthorization("ValidGithubUser");
+        backgroundWorkerQueue.QueueBackgroundWorkItem(async token =>
+        {
+            var batchSize = int.Parse(config["spot-pricing:onDemandParseBatchSize"] ?? "1");
+            Log.Information("batchsize: {BatchSize}", batchSize);
+            var semaphore = new SemaphoreSlim(1);
 
+            var csvFileQuery = File.ReadAllText("sql/unparsedCsvFile.sql");
+            await using var connection = new NpgsqlConnection(connectionStringBuilder.ToString());
+            var csvFiles = (await connection.QueryAsync<OnDemandCsvFile>(csvFileQuery))
+                .Take(batchSize);
+            var results = csvFiles
+                .Select(async csv =>
+                {
+                    try
+                    {
+                        semaphore.Wait();
+                        Log.Information("parsing csvfile : {CsvFileId}", csv.Id);
+                        var result = await awsMultiClient.ParseOnDemandPricingAsync(
+                            connectionStringBuilder,
+                            csv.Id,
+                            cancelToken);
+                    }
+                    finally
+                    {
+                        semaphore.Release();
+                    }
+                });
+            await Task.WhenAll(results);
+        });
+
+        return "success";
+    })
+// .RequireAuthorization("ValidGithubUser")
+    ;
 app.Run();

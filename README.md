@@ -15,3 +15,4 @@ data project to query spot prices for AWS and Azure, for market research purpose
 * CLI <https://docs.aws.amazon.com/cli/latest/reference/ec2/describe-availability-zones.html>
 * EC2 Instances for machine learning: <https://docs.aws.amazon.com/dlami/latest/devguide/gpu.html>
 * Amazon Pricing Documentation: <https://docs.aws.amazon.com/sdkfornet/v3/apidocs/items/Pricing/NPricing.html>
+* long running asp.net core tasks: <https://blog.elmah.io/async-processing-of-long-running-tasks-in-asp-net-core/>

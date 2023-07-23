@@ -144,8 +144,7 @@ public class OnDemandPrice
         return onDemandPrice;
     }
 
-    public static async Task BulkCopy(NpgsqlBinaryImporter pgPricingBulkCopier, DateTimeOffset createdAt,
-        OnDemandPrice onDemandPrice, CancellationToken cancellationToken = default(CancellationToken))
+    public static async Task BulkCopy(NpgsqlBinaryImporter pgPricingBulkCopier, DateTimeOffset createdAt, OnDemandPrice onDemandPrice, CancellationToken cancellationToken)
     {
         try
         {
@@ -201,6 +200,63 @@ public class OnDemandPrice
             await pgPricingBulkCopier.WriteAsync(onDemandPrice.ProcessorFeatures, NpgsqlDbType.Text, cancellationToken);
             await pgPricingBulkCopier.WriteAsync(onDemandPrice.RegionCode, NpgsqlDbType.Text, cancellationToken);
             await pgPricingBulkCopier.WriteAsync(onDemandPrice.serviceName, NpgsqlDbType.Text, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "ondemanprice bulk copy error");
+            Log.Error(ex, "ondemanprice bulk copy error: {OnDemandPriceRecord}", onDemandPrice);
+            Log.Error(ex.InnerException, "ondemanprice bulk copy error");
+        }
+    }
+    public static void BulkCopy(NpgsqlBinaryImporter pgPricingBulkCopier, DateTimeOffset createdAt, OnDemandPrice onDemandPrice)
+    {
+        try
+        {
+            pgPricingBulkCopier.StartRow();
+            pgPricingBulkCopier.Write(createdAt.ToUniversalTime(), NpgsqlDbType.TimestampTz);
+            pgPricingBulkCopier.Write(onDemandPrice.SKU, NpgsqlDbType.Text);
+            pgPricingBulkCopier.Write(onDemandPrice.OnDemandCsvFilesId, NpgsqlDbType.Bigint);
+            pgPricingBulkCopier.Write(onDemandPrice.OnDemandCsvRowsId, NpgsqlDbType.Bigint);
+            pgPricingBulkCopier.Write(onDemandPrice.OfferTermCode, NpgsqlDbType.Text);
+            pgPricingBulkCopier.Write(onDemandPrice.RateCode, NpgsqlDbType.Text);
+            pgPricingBulkCopier.Write(onDemandPrice.TermType, NpgsqlDbType.Text);
+            pgPricingBulkCopier.Write(onDemandPrice.PriceDescription, NpgsqlDbType.Text);
+            pgPricingBulkCopier.Write(onDemandPrice.EffectiveDate, NpgsqlDbType.Date);
+            pgPricingBulkCopier.Write(onDemandPrice.StartingRange, NpgsqlDbType.Text);
+            pgPricingBulkCopier.Write(onDemandPrice.EndingRange, NpgsqlDbType.Text);
+            pgPricingBulkCopier.Write(onDemandPrice.Unit, NpgsqlDbType.Text);
+            pgPricingBulkCopier.Write(onDemandPrice.PricePerUnit, NpgsqlDbType.Money);
+            pgPricingBulkCopier.Write(onDemandPrice.Currency, NpgsqlDbType.Text);
+            pgPricingBulkCopier.Write(onDemandPrice.RelatedTo, NpgsqlDbType.Text);
+            pgPricingBulkCopier.Write(onDemandPrice.LeaseContractLength, NpgsqlDbType.Text);
+            pgPricingBulkCopier.Write(onDemandPrice.PurchaseOption, NpgsqlDbType.Text);
+            pgPricingBulkCopier.Write(onDemandPrice.OfferingClass, NpgsqlDbType.Text);
+            pgPricingBulkCopier.Write(onDemandPrice.ProductFamily, NpgsqlDbType.Text);
+            pgPricingBulkCopier.Write(onDemandPrice.serviceCode, NpgsqlDbType.Text);
+            pgPricingBulkCopier.Write(onDemandPrice.Location, NpgsqlDbType.Text);
+            pgPricingBulkCopier.Write(onDemandPrice.LocationType, NpgsqlDbType.Text);
+            pgPricingBulkCopier.Write(onDemandPrice.InstanceType, NpgsqlDbType.Text);
+            pgPricingBulkCopier.Write(onDemandPrice.CurrentGeneration, NpgsqlDbType.Text);
+            pgPricingBulkCopier.Write(onDemandPrice.InstanceFamily, NpgsqlDbType.Text);
+            pgPricingBulkCopier.Write(onDemandPrice.vCPU, NpgsqlDbType.Text);
+            pgPricingBulkCopier.Write(onDemandPrice.PhysicalProcessor, NpgsqlDbType.Text);
+            pgPricingBulkCopier.Write(onDemandPrice.ClockSpeed, NpgsqlDbType.Text);
+            pgPricingBulkCopier.Write(onDemandPrice.Memory, NpgsqlDbType.Text);
+            pgPricingBulkCopier.Write(onDemandPrice.Storage, NpgsqlDbType.Text);
+            pgPricingBulkCopier.Write(onDemandPrice.NetworkPerformance, NpgsqlDbType.Text);
+            pgPricingBulkCopier.Write(onDemandPrice.ProcessorArchitecture, NpgsqlDbType.Text);
+            pgPricingBulkCopier.Write(onDemandPrice.Tenancy, NpgsqlDbType.Text);
+            pgPricingBulkCopier.Write(onDemandPrice.OperatingSystem, NpgsqlDbType.Text);
+            pgPricingBulkCopier.Write(onDemandPrice.LicenseModel, NpgsqlDbType.Text);
+            pgPricingBulkCopier.Write(onDemandPrice.GPU, NpgsqlDbType.Text);
+            pgPricingBulkCopier.Write(onDemandPrice.GpuMemory, NpgsqlDbType.Text);
+            pgPricingBulkCopier.Write(onDemandPrice.instanceSKU, NpgsqlDbType.Text);
+            pgPricingBulkCopier.Write(onDemandPrice.MarketOption, NpgsqlDbType.Text);
+            pgPricingBulkCopier.Write(onDemandPrice.NormalizationSizeFactor, NpgsqlDbType.Text);
+            pgPricingBulkCopier.Write(onDemandPrice.PhysicalCores, NpgsqlDbType.Text);
+            pgPricingBulkCopier.Write(onDemandPrice.ProcessorFeatures, NpgsqlDbType.Text);
+            pgPricingBulkCopier.Write(onDemandPrice.RegionCode, NpgsqlDbType.Text);
+            pgPricingBulkCopier.Write(onDemandPrice.serviceName, NpgsqlDbType.Text);
         }
         catch (Exception ex)
         {
