@@ -393,22 +393,26 @@ public class AwsMultiClient
         };
     }
 
-    public async Task<ParseOnDemandPricingResult> ParseOnDemandPricingAsync(long csvFileId,
-        NpgsqlConnection readConnection,
-        NpgsqlConnection writeConnection,
+    public async Task<ParseOnDemandPricingResult> ParseOnDemandPricingAsync(
+        NpgsqlConnectionStringBuilder connectionStringBuilder,
+        IEnumerable<long> csvFileIds,
         CancellationToken cancellationToken = default(CancellationToken))
     {
         var stopWatch = new Stopwatch();
         stopWatch.Start();
-        var createCsvFileTempTableSql =
-            await File.ReadAllTextAsync("sql/createCsvFileTempTable.sql", cancellationToken);
-        var tempTable = $"csvFile{DateTimeOffset.Now.ToUnixTimeMilliseconds()}";
+        await using var readConnection = new NpgsqlConnection(connectionStringBuilder.ToString());
+        await using var writeConnection = new NpgsqlConnection(connectionStringBuilder.ToString());
+        await readConnection.OpenAsync();
+        await writeConnection.OpenAsync();
+        var createCsvFileTempTableSql = (await File.ReadAllTextAsync("sql/createCsvFileTempTable.sql", cancellationToken))
+                .Replace("@Ids", string.Join(",", csvFileIds))
+            ;
         var tempTablePrepResult = readConnection.Execute(
             createCsvFileTempTableSql, 
-            new { Id = csvFileId }, 
+            // new { Ids = string.Join(",", csvFileIds) }, 
             commandTimeout: 600);
         var pgCsvTextReader = await readConnection
-            .BeginTextExportAsync($"copy {tempTable} (line) TO STDOUT (FORMAT TEXT)", cancellationToken);
+            .BeginTextExportAsync($"copy csvFile (line) TO STDOUT (FORMAT TEXT)", cancellationToken);
         var createdAt = DateTimeOffset.Now;
         var bulkCopySql = await File.ReadAllTextAsync("sql/onDemandPricingBulkCopy.sql", cancellationToken);
         var pgPricingBulkCopier = await writeConnection.BeginBinaryImportAsync(bulkCopySql, cancellationToken);
@@ -452,7 +456,7 @@ public class AwsMultiClient
         stopWatch.Stop();
         return new ParseOnDemandPricingResult()
         {
-            OnDemandCsvFileId = csvFileId,
+            OnDemandCsvFileIds = csvFileIds,
             RecordsCopied = recordsCopied,
             TimeElapsed = stopWatch.Elapsed
         };
@@ -461,7 +465,7 @@ public class AwsMultiClient
 
 public class ParseOnDemandPricingResult
 {
-    public long OnDemandCsvFileId { get; set; }
+    public IEnumerable<long> OnDemandCsvFileIds { get; set; }
     public long RecordsCopied { get; init; }
     public TimeSpan TimeElapsed { get; init; }
 }

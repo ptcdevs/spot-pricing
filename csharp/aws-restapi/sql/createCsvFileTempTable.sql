@@ -1,14 +1,9 @@
-with csv as (select '"OnDemandCsvFilesId",' || '"OnDemandCsvRowsId",' || ODCF."Header" as line,
-                    0                                                                  as rownum
-             from "OnDemandCsvFiles" ODCF
-             where "Id" = @Id
-             union
-             select '"' || ODCR."OnDemandCsvFilesId" || '",' || '"' || ODCR."Id" || '",' || ODCR."Row" as line,
-                    1                                                                                  as rownum
+select '"OnDemandCsvFilesId",' || '"OnDemandCsvRowsId",' || ODCF."Header" as line
+into temporary table csvFile
+from "OnDemandCsvFiles" ODCF
+where "Id" in (@Ids);
 
-             from "OnDemandCsvRows" ODCR
-             where "OnDemandCsvFilesId" = @Id)
-
-select line
-from csv
-order by rownum
+insert into csvFile
+select '"' || ODCR."OnDemandCsvFilesId" || '",' || '"' || ODCR."Id" || '",' || ODCR."Row" as line
+from "OnDemandCsvRows" ODCR
+where "OnDemandCsvFilesId" in (@Ids);

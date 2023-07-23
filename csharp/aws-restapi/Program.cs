@@ -296,40 +296,14 @@ app.MapGet("parseondemandpricing", async (
     var csvFiles = (await connection.QueryAsync<OnDemandCsvFile>(unparsedCsvFileIdsSql, commandTimeout: 300))
         .Take(batchSize)
         .ToList();
-    Log.Information($"batchsize: {batchSize}");
-    Log.Information($"csvFile count: {csvFiles.Count}");
-    var semaphore = new SemaphoreSlim(1);
-    var resultTasks = csvFiles
-        .Select(async csvFile =>
-        {
-            try
-            {
-                semaphore.Wait();
-                Log.Information("parsing csv file id ({csvFileId}) from url: {csvFileUrl}", csvFile.Id, csvFile.Url);
-                await using (var readConnection = new NpgsqlConnection(connectionStringBuilder.ToString()))
-                await using (var writeConnection = new NpgsqlConnection(connectionStringBuilder.ToString()))
-                {
-                    await readConnection.OpenAsync(cancelToken);
-                    await writeConnection.OpenAsync(cancelToken);
-                    var _results = await awsMultiClient.ParseOnDemandPricingAsync(
-                        csvFile.Id,
-                        readConnection,
-                        writeConnection,
-                        cancelToken
-                    );
-                    readConnection.Close();
-                    writeConnection.Close();
-                    return _results;
-                }
-            }
-            finally
-            {
-                semaphore.Release();
-            }
-        })
-        .ToList();
+    var csvFilesIds = csvFiles.Select(csv => csv.Id);
+    Log.Information("batchsize: {BatchSize}", batchSize);
+    Log.Information("csvFile count: {CsvFilesCount}", csvFiles.Count);
+    var results = await awsMultiClient.ParseOnDemandPricingAsync(
+        connectionStringBuilder,
+        csvFilesIds,
+        cancelToken);
 
-    var results = await Task.WhenAll(resultTasks);
     return Results.Json(new
     {
         results
