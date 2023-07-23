@@ -1,15 +1,15 @@
 {
 	"profiles": {
 		"aws_restapi": {
-			"commandName": "ENC[AES256_GCM,data:s4hrkShvWQ==,iv:33PBkWtyg5KcyuTFSrQdMoA3dQ3e7Xq4Q0SRlv3tpNQ=,tag:1jkoyVOuCCYqaPDCkRa/Dg==,type:str]",
-			"dotnetRunMessages": "ENC[AES256_GCM,data:rd9grA==,iv:M3B/D97qe3LlRmdv3ZRySqLUwNDfH5/ZJLWfJY9e/cU=,tag:XC6TconmWeKeO0EoIpHjhQ==,type:bool]",
-			"launchBrowser": "ENC[AES256_GCM,data:ShzzA1A=,iv:kGAGYhHiUxaJ0gChC5QaUoPYhZOfO7nAWNk5hb04bm8=,tag:2ARSseUuhoQNHAS+ybxKgA==,type:bool]",
-			"applicationUrl": "ENC[AES256_GCM,data:KWyUkU21ogASqcowzJf/yYIXCidZIw==,iv:jujHOhv+E0vTeFBIwt0edTQyATpMQSxAEkA8572PN0Y=,tag:YS8+LuR442qr0eJiTGOv5Q==,type:str]",
+			"commandName": "ENC[AES256_GCM,data:wKTRfHfwRg==,iv:cqw/E0rVT0GlQikiMhV9zmDgFIARSGFBg4tEcDMIqpA=,tag:lTot4xbT+7QA0QY9FtQmNw==,type:str]",
+			"dotnetRunMessages": "ENC[AES256_GCM,data:8rY3Xg==,iv:xYCnJqwYvO9BaAMIjYG58V++7266sMn523fNODFyJ+4=,tag:F/Fwiixmzr+hR482pLBJWg==,type:bool]",
+			"launchBrowser": "ENC[AES256_GCM,data:LmVb9kY=,iv:jyUJ2+eP4Al8ZqSMjELCkcDG3xWKMge46hN189gfnWg=,tag:soDlMORRbMNQY3k4ybdelw==,type:bool]",
+			"applicationUrl": "ENC[AES256_GCM,data:RAWf+1/u/IBSPzJT1iDK4UzPh8a+FIJwwsozga/0RfuUBph+HYzI8Q==,iv:p3MiptRixIHpTKkAyi/xHkd9+0k8kYcMrJ0Gw4ikSjQ=,tag:pwcvAWSaTKvfXTYDpM1xNQ==,type:str]",
 			"environmentVariables": {
-				"ASPNETCORE_ENVIRONMENT": "ENC[AES256_GCM,data:11CEmXsnXkjZYFU=,iv:kccUqgntHvNcedhoegZ+HOUyTBgO3EFlPNVwBgU/KvI=,tag:nbemRKnc0ltkgaPPZ9R3VA==,type:str]",
-				"GITHUB_OAUTH_CLIENT_SECRET": "ENC[AES256_GCM,data:fUNGw4siddTtJt18WjyikdbKjEohVpch6ev10zPTlIgdk82Y1W3TRQ==,iv:3NFNNXWG7xaJ3QRVcFXOPkE04rZCIVXXC66kr6vzZLw=,tag:dm3QHsEUh6brDp7biYaULQ==,type:str]",
-				"AWSSECRETKEY": "ENC[AES256_GCM,data:Mj3m9GXtNaTaOciI41RKJXuI/6quW3SgvrYMo8rqYqkA1nx51FjplQ==,iv:SibRQgDSZBLOc/BsG2414b0O96B0dnOH18UWCejLBXs=,tag:eEQgZymVgzvK8TEZLLHx6w==,type:str]",
-				"POSTGRESQL_PASSWORD": "ENC[AES256_GCM,data:1p1gUe65XxjSkHVR8WoL,iv:g5qmfjI+XVasJrOY25RXHhsC2DYv8ufOz3TO8g5sIQ8=,tag:te6JuCFIeA+GYD8OZqYxig==,type:str]"
+				"ASPNETCORE_ENVIRONMENT": "ENC[AES256_GCM,data:LphWUSY6RI0VBc0=,iv:qmmXYP03mKIuTay7IIZeHYIgaFP5rOCddfocdURptgw=,tag:ricNd4GV7rGdKfT2EAYNGQ==,type:str]",
+				"GITHUB_OAUTH_CLIENT_SECRET": "ENC[AES256_GCM,data:NduzmkvV+GoD0aLHgJkDPoKzdNEkBIaERPwJQOrE9+gfXTalV3jUag==,iv:hgVaAyj7SVZOfs2V38gb9osjLHRso6mKBLXkC441paE=,tag:VL+AbeekS7PrwNdh4Whnlg==,type:str]",
+				"AWSSECRETKEY": "ENC[AES256_GCM,data:arEkrEgKjrkFeMbv9WiAxiXQ8l1v9L0eMjzA61uDi/mMvnegWU32vQ==,iv:vLyMiqno7ZudGPd1iqVozwsV4zrSyd9ZsffZsExDQ2Q=,tag:zndSD16bigkzZ8H0uWCuGQ==,type:str]",
+				"POSTGRESQL_PASSWORD": "ENC[AES256_GCM,data:1HL7xv60s2y6VphK4mpd,iv:guCneukzFzo2nzId1ijWSNJeqOKFSxMrxX15IL6ZNI8=,tag:d50DkL5gGdDF1H//0qbFVQ==,type:str]"
 			}
 		}
 	},
@@ -21,11 +21,11 @@
 		"age": [
 			{
 				"recipient": "age157regwcpk9srausy2l8q7ttv98urmwxqs2kcpd6nkfwyuej8py8s804e9a",
-				"enc": "-----BEGIN AGE ENCRYPTED FILE-----\nYWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSBTd1JCWGhlS1JIa0d5S0M4\nWmRvQ0hZWHV1UXlvbGphM3lObG1MbGFNTG1vCll0YXNJcU5vSjd5K2ZOaEc0blRO\nM2ZtMCt4QXZSaEFUK1MrQlBFM01kUVkKLS0tIExHWHRhV2pvTDdSeUNaZVF5aVZt\neHloQ1NHem5kM0d1NHJDbjV4UHJFWDAKhGpBqGdj9pBqjK+2q/cxwykxByXgSI4j\nbsjoftklYA3aaAreXb3SS2Em9X5p++okLvxpvhVItgIqzNoAB5iOzw==\n-----END AGE ENCRYPTED FILE-----\n"
+				"enc": "-----BEGIN AGE ENCRYPTED FILE-----\nYWdlLWVuY3J5cHRpb24ub3JnL3YxCi0+IFgyNTUxOSB2RGNIN2p5L0NaUWh3a3gw\nK2FUVjV5T1AvRjZYejBSdklMdVBCV1Q3WFhvClI5RWp2bzB0Y3ZhOGJxWlZvdS9i\nRW8zaGpSN3BYS1p6aExJcGdWTnJxbzAKLS0tIFNFWFpTVTUzSkJEUVgzQ1BzT0h4\nYUhFN3Q1V29NUCsxa1VUMU15MG1tR28K274D4THHDVF9zP+c1/2p4Gg/EdmQ1cTD\nkAznWI8JzCKfUZnnNbBU3lU9LTBLp0vDQf/yp2JrzrHNVuY6Mrwazg==\n-----END AGE ENCRYPTED FILE-----\n"
 			}
 		],
-		"lastmodified": "2023-07-15T04:23:32Z",
-		"mac": "ENC[AES256_GCM,data:wtHqhU7tal/jQbPDgnrOy/SGeJ9aaZsv+5+pmSHs0oBtr2mS+8WhljXEXPm2FDwJ/Tb2mUSB6wj5InbIs6jhJsNRd2/QVUPumpvXtsREryaCypg+46kITQOTB0r57JQVJQI9q9ihX0sGK/Q24eBTL/Of/pH0fi/Gh/v7lPQZNdE=,iv:9wjRRXo76dbFlvQwP/RRExLrr4RTMc5xXlHv/305oLc=,tag:sEl87tbS48t1bHgdedddKw==,type:str]",
+		"lastmodified": "2023-07-21T14:00:16Z",
+		"mac": "ENC[AES256_GCM,data:jorZwSquuIFkoWnQVL977R3lIHEMzhInNQjW0vQiv1Z5R4w3kvCN/mwDUcU4+Ks+L2jJT17GnZgWrFl2FgBAB1p8PKZiohbRry+evcPAp+pSmxZoAZBFsDP+lwUFNk+tHW+a9+Yut7929+Ky1/QrkiQ9xY0KNEJlb8gA0sCdlEU=,iv:qJI2gAl3t7ZYsB6pIN6S0WXlJ839H45IogugX5WSbPs=,tag:yR2pAxbYbDbmg95C9wAHiw==,type:str]",
 		"pgp": null,
 		"unencrypted_suffix": "_unencrypted",
 		"version": "3.7.3"

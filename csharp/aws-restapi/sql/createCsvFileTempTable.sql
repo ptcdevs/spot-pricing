@@ -6,4 +6,4 @@ where "Id" = @Id;
 insert into csvFile
 select '"' || ODCR."OnDemandCsvFilesId" || '",' || '"' || ODCR."Id" || '",' || ODCR."Row" as line
 from "OnDemandCsvRows" ODCR
-where "OnDemandCsvFilesId" = @Id
+where "OnDemandCsvFilesId" = @Id;

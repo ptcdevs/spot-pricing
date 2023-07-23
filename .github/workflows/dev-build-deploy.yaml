@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - master
+      - provision-dev
   pull_request:
     branches:
       - master
@@ -50,49 +51,51 @@ jobs:
         uses: docker/setup-qemu-action@v2
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
-#      - name: Login to GitHub Container Registry
-#        uses: docker/login-action@v2
-#        with:
-#          registry: ghcr.io
-#          username: vector623
-#          password: ${{ secrets.GHCR_GITHUB_TOKEN }}
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: vector623
+          password: ${{ secrets.GHCR_GITHUB_TOKEN }}
       - name: Build docker image
         uses: docker/build-push-action@v4
         with:
           file: ./Dockerfile
-          tags: ghcr.io/ptcdevs/aws-restapi:latest
-          push: false
+          tags: ghcr.io/ptcdevs/spot-pricing:${{ needs.set-refs.outputs.branch }}
+          push: true
     outputs:
       docker-tag: ${{ steps.set-docker-tag.outputs.docker-tag }}
-#  helm-deploy:
-#    environment: dev
-#    name: Helm deploy to dev
-#    runs-on: ubuntu-latest
-#    needs:
-#      - set-refs
-#      - docker-build
-#    steps:
-#      - uses: actions/checkout@v3
-#      - name: Check refs
-#        run: |
-#          echo "branch: ${{ needs.set-refs.outputs.branch }}"
-#          echo "docker-tag: ${{ needs.docker-build.outputs.docker-tag }}"
-#      - uses: azure/k8s-set-context@v3
-#        with:
-#          method: kubeconfig
-#          kubeconfig: ${{ secrets.KUBECONFIG }}
-#          context: lke77314-ctx
-#      - name: Helm uninstall
-#        run: helm -n dev uninstall python-restapi-${TAG}
-#        env:
-#          TAG: ${{ needs.set-refs.outputs.branch }}
-#        continue-on-error: true
-#      - id: helm-install
-#        name: Helm install
-#        run: |
-#          helm -n dev install python-restapi-${TAG} ./python-restapi \
-#            --set image.tag=${TAG} \
-#            --wait >> $GITHUB_STEP_SUMMARY
-#        working-directory: helm
-#        env:
-#          TAG: ${{ needs.set-refs.outputs.branch }}
+  helm-deploy:
+    environment: dev
+    name: Helm deploy to dev
+    runs-on: ubuntu-latest
+    needs:
+      - set-refs
+      - docker-build
+    steps:
+      - uses: actions/checkout@v3
+      - name: Check refs
+        run: |
+          echo "branch: ${{ needs.set-refs.outputs.branch }}"
+          echo "docker-tag: ${{ needs.docker-build.outputs.docker-tag }}"
+      - uses: azure/k8s-set-context@v3
+        with:
+          method: kubeconfig
+          kubeconfig: ${{ secrets.KUBECONFIG }}
+          context: lke77314-ctx
+      - name: List namespaces
+        run:  kubectl get namespaces
+      - name: Helm uninstall
+        run: helm -n spot-pricing-dev uninstall spot-pricing
+        env:
+          TAG: ${{ needs.set-refs.outputs.branch }}
+        continue-on-error: true
+      - id: helm-install
+        name: Helm install
+        run: |
+          helm -n spot-pricing-dev install spot-pricing ./spot-pricing \
+            --set image.tag=${TAG} \
+            --wait >> $GITHUB_STEP_SUMMARY
+        working-directory: helm
+        env:
+          TAG: ${{ needs.set-refs.outputs.branch }}

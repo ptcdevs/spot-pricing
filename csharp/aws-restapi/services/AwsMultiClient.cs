@@ -393,57 +393,94 @@ public class AwsMultiClient
         };
     }
 
-    public async Task<ParseOnDemandPricingResult> ParseOnDemandPricingAsync(long csvFileId,
+    public async Task<ParseOnDemandPricingResult> ParseOnDemandPricingAsync(
         NpgsqlConnectionStringBuilder connectionStringBuilder,
+        long csvFileId,
         CancellationToken cancellationToken = default(CancellationToken))
     {
         var stopWatch = new Stopwatch();
         stopWatch.Start();
-        await using var readConnection = new NpgsqlConnection(connectionStringBuilder.ToString());
-        await using var writeConnection = new NpgsqlConnection(connectionStringBuilder.ToString());
-        await readConnection.OpenAsync(cancellationToken);
-        await writeConnection.OpenAsync(cancellationToken);
-        var createCsvFileTempTableSql =
-            await File.ReadAllTextAsync("sql/createCsvFileTempTable.sql", cancellationToken);
-        var tempTablePrepResult = await readConnection
-            .ExecuteAsync(createCsvFileTempTableSql, new { Id = csvFileId }, commandTimeout: 600);
-        var pgCsvTextReader = await readConnection
-            .BeginTextExportAsync("copy csvFile (line) TO STDOUT (FORMAT TEXT)", cancellationToken);
-        var createdAt = DateTimeOffset.Now;
-        var bulkCopySql = await File.ReadAllTextAsync("sql/onDemandPricingBulkCopy.sql", cancellationToken);
-        var pgPricingBulkCopier = await writeConnection.BeginBinaryImportAsync(bulkCopySql, cancellationToken);
-        int recordsCopied = 0;
-        using var csv = new CsvReader(pgCsvTextReader, CultureInfo.InvariantCulture);
-        var records = csv.GetRecords<dynamic>();
-        foreach (var record in records)
+        await using (var readConnection = new NpgsqlConnection(connectionStringBuilder.ToString()))
+        await using (var writeConnection = new NpgsqlConnection(connectionStringBuilder.ToString()))
         {
-            if (recordsCopied % 50000 == 0) Log.Information("{recordsCopied} records copied", recordsCopied);
-            //convert to poco
-            var recordDictionary = ((IEnumerable<KeyValuePair<string, object>>)record)
-                .ToDictionary(kv => kv.Key, kv => kv.Value);
-            var onDemandPrice = OnDemandPrice.Convert(recordDictionary);
-            await OnDemandPrice.BulkCopy(pgPricingBulkCopier, createdAt, onDemandPrice, cancellationToken);
-            recordsCopied += 1;
-        }
-        await pgPricingBulkCopier.CompleteAsync(cancellationToken);
-        await readConnection.CloseAsync();
-        await writeConnection.CloseAsync();
-        
-        Log.Information("{recordsCopied} records copied", recordsCopied);
+            await readConnection.OpenAsync(cancellationToken);
+            await writeConnection.OpenAsync(cancellationToken);
+            Log.Information("parsing csv file id: {CsvFileId}", csvFileId);
+            var createCsvFileTempTableSql =
+                await File.ReadAllTextAsync("sql/createCsvFileTempTable.sql", cancellationToken);
+            var tempTablePrepResult = await readConnection.ExecuteAsync(
+                createCsvFileTempTableSql,
+                new { Id = csvFileId },
+                commandTimeout: 600);
+            var pgCsvTextReader = await readConnection
+                .BeginTextExportAsync($"copy csvFile (line) TO STDOUT (FORMAT TEXT)", cancellationToken);
+            var createdAt = DateTimeOffset.Now;
+            var bulkCopySql = await File.ReadAllTextAsync("sql/onDemandPricingBulkCopy.sql", cancellationToken);
+            var pgPricingBulkCopier = await writeConnection.BeginBinaryImportAsync(bulkCopySql, cancellationToken);
+            int recordsCopied = 0;
+            using var csv = new CsvReader(pgCsvTextReader, CultureInfo.InvariantCulture);
+            var records = csv.GetRecords<dynamic>();
+            foreach (var record in records)
+            {
+                if (recordsCopied % 50000 == 0) Log.Information("{recordsCopied} records copied", recordsCopied);
+                //convert to poco
+                var recordDictionary = ((IEnumerable<KeyValuePair<string, object>>)record)
+                    .ToDictionary(kv => kv.Key, kv => kv.Value);
+                var onDemandPrice = OnDemandPrice.Convert(recordDictionary);
+                try
+                {
+                    await OnDemandPrice.BulkCopy(pgPricingBulkCopier, createdAt, onDemandPrice, cancellationToken);
+                }
+                catch (TaskCanceledException ex) when (ex.InnerException is TimeoutException)
+                {
+                    Log.Error(ex, "timeout error processing onDemandPrice.OnDemandCsvRowsId {OnDemandCsvRowId}",
+                        onDemandPrice?.OnDemandCsvRowsId.ToString() ?? "NULL");
+                    Log.Error(ex, "timeout error processing onDemandPrice {@OnDemandPrice}", onDemandPrice);
+                }
+                catch (TaskCanceledException ex)
+                {
+                    Log.Error(ex, "non-timeout error processing onDemandPrice.OnDemandCsvRowsId {OnDemandCsvRowId}",
+                        onDemandPrice?.OnDemandCsvRowsId.ToString() ?? "NULL");
+                    Log.Error(ex, "non-timeout error processing onDemandPrice {@OnDemandPrice}", onDemandPrice);
+                    Log.Error(ex.InnerException, "inner message: {InnerExceptionMessage}",
+                        ex.InnerException?.Message ?? "NULL");
+                }
+                catch (Exception ex)
+                {
+                    Log.Error(ex, "error processing onDemandPrice.OnDemandCsvRowsId {OnDemandCsvRowId}",
+                        onDemandPrice?.OnDemandCsvRowsId.ToString() ?? "NULL");
+                    Log.Error(ex, "error processing onDemandPrice {@OnDemandPrice}", onDemandPrice);
+                    Log.Error(ex.InnerException, "inner message: {InnerExceptionMessage}",
+                        ex.InnerException?.Message ?? "NULL");
+                }
 
-        stopWatch.Stop();
-        return new ParseOnDemandPricingResult()
-        {
-            OnDemandCsvFileId = csvFileId,
-            RecordsCopied = recordsCopied,
-            TimeElapsed = stopWatch.Elapsed
-        };
+                recordsCopied += 1;
+            }
+
+            pgCsvTextReader.Close();
+            await pgPricingBulkCopier.CompleteAsync(cancellationToken);
+            await pgPricingBulkCopier.CloseAsync(cancellationToken);
+            await readConnection.ExecuteAsync("truncate csvFile");
+            await readConnection.ExecuteAsync("drop table csvFile");
+            await writeConnection.CloseAsync();
+            await readConnection.CloseAsync();
+            await writeConnection.CloseAsync();
+            Log.Information("{recordsCopied} records copied", recordsCopied);
+
+            stopWatch.Stop();
+            return new ParseOnDemandPricingResult()
+            {
+                OnDemandCsvFileIds = csvFileId,
+                RecordsCopied = recordsCopied,
+                TimeElapsed = stopWatch.Elapsed
+            };
+        }
     }
 }
 
 public class ParseOnDemandPricingResult
 {
-    public long OnDemandCsvFileId { get; set; }
+    public long OnDemandCsvFileIds { get; set; }
     public long RecordsCopied { get; init; }
     public TimeSpan TimeElapsed { get; init; }
 }

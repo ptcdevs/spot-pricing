@@ -1,5 +1,9 @@
+using System.Web;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.OAuth;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.OpenApi.Models;
+using Serilog;
 using Swashbuckle.AspNetCore.SwaggerGen;
 
 namespace aws_restapi;
@@ -25,7 +29,7 @@ public abstract class GithubAuth
                         .Where(claim => claim.Type.Equals("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name"))
                         .Select(claim => claim.Value)
                         .SingleOrDefault() ?? "";
-                    Console.WriteLine($"github user: {githubUser}");
+                    // Console.WriteLine($"github user: {githubUser}");
 
                     return authorizedGithubUsers.Contains(githubUser);
                 }).Build());

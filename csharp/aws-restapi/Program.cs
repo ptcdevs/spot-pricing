@@ -1,12 +1,12 @@
 using System.Diagnostics;
 using Amazon;
 using Amazon.EC2.Model;
-using Amazon.Pricing;
 using Amazon.Runtime;
 using aws_restapi;
 using aws_restapi.services;
 using Dapper;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.OpenApi.Models;
 using Npgsql;
 using Serilog;
@@ -21,21 +21,27 @@ var config = new ConfigurationBuilder()
     .AddEnvironmentVariables()
     .Build();
 var builder = WebApplication.CreateBuilder(args);
+builder.WebHost.UseKestrel(options =>
+{
+    options.Limits.MaxConcurrentConnections = 100;
+    options.Limits.KeepAliveTimeout = TimeSpan.FromMinutes(60);
+});
+builder.Logging.ClearProviders();
 Log.Logger = new LoggerConfiguration()
     .WriteTo.Console(builder.Environment.IsProduction()
-        ? LogEventLevel.Error
+        ? LogEventLevel.Information
         : LogEventLevel.Information)
     .CreateLogger();
+builder.Logging.AddSerilog(Log.Logger);
 
 //authentication
 builder.Services
     .AddAuthentication(options =>
     {
-        options.DefaultAuthenticateScheme = CookieAuthenticationDefaults.AuthenticationScheme;
-        options.DefaultSignInScheme = CookieAuthenticationDefaults.AuthenticationScheme;
+        options.DefaultScheme = CookieAuthenticationDefaults.AuthenticationScheme;
         options.DefaultChallengeScheme = "GitHub";
     })
-    .AddCookie(cookieOptions => { cookieOptions.AccessDeniedPath = "/unauthorized"; })
+    .AddCookie()
     .AddGitHub(authOptions =>
     {
         authOptions.ClientId = config["GithubOauth:ClientId"];
@@ -119,12 +125,22 @@ builder.Services.AddScoped<AwsMultiClient>(provider =>
             config["AWSSECRETKEY"]));
 });
 
+builder.Services.AddHostedService<LongRunningService>();
+builder.Services.AddSingleton<BackgroundWorkerQueue>();
+
 #endregion config
 
 builder.Services
     .AddAuthorization(GithubAuth.CustomPolicy());
 var app = builder.Build();
 
+app.Use((context, next) =>
+{
+    context.Request.Scheme = "https";
+    return next(context);
+});
+
+// app.UseForwardedHeaders();
 app.UseAuthentication();
 app.UseAuthorization();
 
@@ -133,11 +149,13 @@ app.UseSwaggerUI(options =>
 {
     options.SwaggerEndpoint("/swagger/v1/swagger.json", $"{builder.Environment.ApplicationName} v1");
 });
-app.MapGet("/", () => "Hello World!")
+app.MapGet("/", () => { return Results.Redirect("/swagger"); })
     .RequireAuthorization("ValidGithubUser");
-app.MapGet("authorize", () => "authorized")
+//TODO: confirm service authentication for health check
+app.MapGet("/health", () => "healthy");
+app.MapGet("login", () => "authorized")
     .RequireAuthorization("ValidGithubUser");
-app.MapGet("unauthorized", () => Results.Unauthorized());
+app.MapGet("unauthorized", Results.Unauthorized);
 app.MapGet("syncgpuspotpricing", async (NpgsqlConnection connection, AwsMultiClient awsMultiClient) =>
     {
         var stopWatch = new Stopwatch();
@@ -223,17 +241,18 @@ app.MapGet("syncgpuspotpricing", async (NpgsqlConnection connection, AwsMultiCli
 app.MapGet("syncondemandpricing", async (
         NpgsqlConnectionStringBuilder connectionStringBuilder,
         NpgsqlConnection connection,
-        AwsMultiClient awsMultiClient
-        , CancellationToken cancelToken) =>
+        AwsMultiClient awsMultiClient,
+        CancellationToken cancelToken) =>
     {
         var onDemandPriceUrlsFetchedSql = File.ReadAllText("sql/onDemandPriceUrlsFetched.sql");
         var onDemandPriceUrlsFetched = await connection
             .QueryAsync<string>(onDemandPriceUrlsFetchedSql, commandTimeout: 300);
 
         var priceFileUrlResponses = await awsMultiClient.GetPriceFileDownloadUrlsAsync(cancelToken);
+        var batchSize = int.Parse(config["spot-pricing:onDemandDownloadBatchSize"] ?? "1");
         var priceUrlsToFetch = priceFileUrlResponses
             .Where(resp => !onDemandPriceUrlsFetched.Contains(resp.Url))
-            .Take(1)
+            .Take(batchSize)
             .ToList();
         var semaphore = new SemaphoreSlim(1);
         var downloads = priceUrlsToFetch
@@ -241,7 +260,7 @@ app.MapGet("syncondemandpricing", async (
             {
                 try
                 {
-                    semaphore.Wait();
+                    await semaphore.WaitAsync();
                     Log.Information(" downloading url: {priceFileUrl}", priceFileDownloadUrl.Url);
                     return await awsMultiClient.DownloadPriceFileAsync(priceFileDownloadUrl, connectionStringBuilder,
                         cancelToken);
@@ -269,40 +288,42 @@ app.MapGet("syncondemandpricing", async (
     .RequireAuthorization("ValidGithubUser");
 
 app.MapGet("parseondemandpricing", async (
-    NpgsqlConnection connection,
-    NpgsqlConnectionStringBuilder connectionStringBuilder,
-    AwsMultiClient awsMultiClient, CancellationToken cancelToken) =>
-{
-    var unparsedCsvFileIdsSql = await File.ReadAllTextAsync("sql/unparsedCsvFileIds.sql");
-    var csvFiles = connection
-        .Query<OnDemandCsvFile>(@"select * from  ""OnDemandCsvFiles""")
-        .Take(1);
-    var semaphore = new SemaphoreSlim(1);
-    var resultTasks = csvFiles
-        .Select(async csvFile =>
+        NpgsqlConnectionStringBuilder connectionStringBuilder,
+        AwsMultiClient awsMultiClient,
+        BackgroundWorkerQueue backgroundWorkerQueue,
+        CancellationToken cancelToken) =>
+    {
+        backgroundWorkerQueue.QueueBackgroundWorkItem(async token =>
         {
-            try
-            {
-                Log.Information("parsing csv file id ({csvFileId}) from url: {csvFileUrl}", csvFile.Id, csvFile.Url);
-                semaphore.Wait();
-                return await awsMultiClient.ParseOnDemandPricingAsync(csvFile.Id, connectionStringBuilder, cancelToken);
-            }
-            catch (Exception ex)
-            {
-                Log.Error("error parsing csv file id ({csvFileId}) from url: {csvFileUrl}", csvFile.Id, csvFile.Url);
-                throw ex;
-            }
-            finally
-            {
-                semaphore.Release();
-            }
+            var batchSize = int.Parse(config["spot-pricing:onDemandParseBatchSize"] ?? "1");
+            Log.Information("batchsize: {BatchSize}", batchSize);
+            var semaphore = new SemaphoreSlim(1);
+
+            var csvFileQuery = File.ReadAllText("sql/unparsedCsvFile.sql");
+            await using var connection = new NpgsqlConnection(connectionStringBuilder.ToString());
+            var csvFiles = (await connection.QueryAsync<OnDemandCsvFile>(csvFileQuery))
+                .Take(batchSize);
+            var results = csvFiles
+                .Select(async csv =>
+                {
+                    try
+                    {
+                        semaphore.Wait();
+                        Log.Information("parsing csvfile : {CsvFileId}", csv.Id);
+                        var result = await awsMultiClient.ParseOnDemandPricingAsync(
+                            connectionStringBuilder,
+                            csv.Id,
+                            cancelToken);
+                        return result;
+                    }
+                    finally
+                    {
+                        semaphore.Release();
+                    }
+                });
+            await Task.WhenAll(results);
         });
 
-    var results = await Task.WhenAll(resultTasks);
-    return new
-    {
-        results
-    };
-}).RequireAuthorization("ValidGithubUser");
-
+        return "success";
+    }).RequireAuthorization("ValidGithubUser");
 app.Run();
