@@ -197,7 +197,7 @@ public class AwsMultiClient
             .Select(jToken => ((JProperty)jToken).Name)
             .Select(effectiveDate =>
                 DateTime.ParseExact(effectiveDate, "yyyyMMddHHmmss", CultureInfo.InvariantCulture).Date)
-            .Where(effectiveDate => effectiveDate.Year >= 2023)
+            .Where(effectiveDate => effectiveDate.Year >= 2022)
             .OrderByDescending(dt => dt)
             .ToList();
         var listPriceListsResponses = effectiveDates

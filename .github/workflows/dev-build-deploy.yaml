@@ -3,7 +3,7 @@ on:
   push:
     branches:
       - master
-      - provision-dev
+      - expand-lookback
   pull_request:
     branches:
       - master
