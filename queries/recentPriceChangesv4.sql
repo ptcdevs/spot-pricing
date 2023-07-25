@@ -9,7 +9,7 @@ with hashed as (select "Instance Type",
                        "TermType",
                        "PriceDescription",
                        --regexp_match("PriceDescription", '^\$[0-9\.]+','') priceDescriptionRegex,
-                       regexp_match("PriceDescription", 'SQL') priceDescriptionRegex,
+                       regexp_match("PriceDescription", 'SQL')            priceDescriptionRegex,
                        regexp_match("PriceDescription", 'SQL') is null as regexTest,
                        "StartingRange",
                        "EndingRange",
@@ -55,23 +55,25 @@ with hashed as (select "Instance Type",
                            "PurchaseOption",
                            "LeaseContractLength",
                            "Region Code",
-                           "Unit"
-                           )::TEXT) as pricegroup
+                           "Unit", "Product Family"
+                           )::TEXT)                                    as pricegroup
                 from "OnDemandPricing"
-                where "Instance Family" = 'GPU instance'
+                where "PricePerUnit" > '$0.00'
+                    and "Instance Family" = 'GPU instance'
 --                   and "Unit" = 'Hrs'
 --                   and "Region Code" = 'us-east-1'
 --                   and "Current Generation" = 'Yes'
-                  and "PricePerUnit" > '$0.00'
-                and regexp_match("PriceDescription", 'SQL') is null
+                  and regexp_match("PriceDescription", 'SQL') is null
 --                   and regexp_matches("PriceDescription", '(sql|SQL)')
-                ),
+),
      calced as (select pricegroup,
                        rank()
                        over (partition by pricegroup, "EffectiveDate", "PricePerUnit" order by random()) as duprank,
                        "Instance Type",
                        "SKU",
                        "EffectiveDate",
+                       min("EffectiveDate") over (partition by pricegroup)                                  minDate,
+                       max("EffectiveDate") over (partition by pricegroup)                                  maxDate,
                        "PricePerUnit",
                        min("PricePerUnit") over (partition by pricegroup)                                   minPrice,
                        max("PricePerUnit") over (partition by pricegroup)                                   maxPrice,
@@ -167,8 +169,9 @@ select pricegroup,
        "Region Code",
        "serviceName"
 from calced
-  where duprank = 1
-and minPrice <> maxPrice
+where duprank = 1
+  and minPrice <> maxPrice
+  and minDate <> maxDate
 order by "Instance Type",
          pricegroup,
          "EffectiveDate"
