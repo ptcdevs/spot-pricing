@@ -53,9 +53,9 @@ with grouped as (select ODP."Instance Type",
                             g."License Model" = odp."License Model"
                 where g."Unit" = 'Hrs'
 --                   and g."Instance Type" like 'p4%'
---                   and g."Operating System" = 'RHEL'
+                  and g."Operating System" = 'RHEL'
 --                   and g."PurchaseOption" = 'No Upfront'
---                   and g."Tenancy" = 'Dedicated'
+                  and g."Tenancy" = 'Dedicated'
 --                   and (g."LeaseContractLength" = '1yr' or g."LeaseContractLength" = '1 yr')
                   and g.minprice <> g.maxprice
                 ),
