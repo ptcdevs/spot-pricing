@@ -48,7 +48,7 @@ public class AwsMultiClient
     /// <exception cref="NotImplementedException"></exception>
     public async Task<IEnumerable<SpotPrice>> SampleSpotPricing(DescribeSpotPriceHistoryRequest req)
     {
-        var maxQueriesPerEndpoint = 10;
+        var maxQueriesPerEndpoint = 100;
         var instanceTypes = req.Filters
             .Where(filter => filter.Name.Equals("instance-type"))
             .SelectMany(filter => filter.Values);
